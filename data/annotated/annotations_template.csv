@@ -1,0 +1,4 @@
+clause_id,source_document,clause_text,category,risk_level,annotator_notes
+1,google_tos,"We may share your information with third parties.",data_sharing,MEDIUM,"Vague — doesn't specify which third parties"
+2,google_tos,"We do not sell your personal information to advertisers.",data_sharing,NONE,"Explicit negation — correctly not risky"
+3,facebook_privacy,"We use your data to show you personalized ads.",tracking_profiling,HIGH,"Direct behavioral advertising admission"

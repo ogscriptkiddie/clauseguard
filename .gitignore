@@ -1,0 +1,45 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ─── Virtual environments ─────────────────────────────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+
+# ─── spaCy models (large, re-downloadable) ────────────────────────────────────
+en_core_web_sm/
+en_core_web_md/
+*.tar.gz
+
+# ─── scikit-learn / ML model files ───────────────────────────────────────────
+ml/models/*.pkl
+ml/models/*.joblib
+
+# ─── Dataset files (raw ToS text — can be large) ─────────────────────────────
+# Keep annotated CSVs in git, but not raw scraped HTML
+data/raw/*.html
+data/raw/*.htm
+
+# ─── IDE / OS ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ─── Environment variables (NEVER commit secrets) ─────────────────────────────
+.env
+.env.local
+*.env
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Flask ────────────────────────────────────────────────────────────────────
+instance/
+flask_session/
