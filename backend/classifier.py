@@ -175,15 +175,71 @@ class RuleBasedClassifier:
         """
         Matches a keyword/phrase against lowercased clause text.
 
-        Multi-word phrases: substring match (more specific, less noise)
-        Single words:       word-boundary regex (avoids partial matches like
-                            "track" matching "contract")
+        Three matching modes:
+          Single word:        word-boundary regex — avoids partial matches
+                              e.g. "track" should not match "contract"
+
+          Short phrase        exact substring — fast, precise for well-known
+          (2–3 words):        fixed phrases like "sell your data"
+
+          Long phrase         proximity match — all words must appear within
+          (4+ words):         a 10-word window, in order. This handles legal
+                              paraphrasing like "share your personal data with
+                              advertisers" matching the keyword phrase
+                              "share your data with".
+
+        Why proximity for long phrases?
+          Legal documents paraphrase constantly. "share with advertisers"
+          becomes "share your personal data with advertisers". Exact substring
+          matching breaks on any intervening word. Proximity matching is more
+          robust while still requiring all the key words to be present.
         """
         keyword = keyword.lower()
-        if ' ' in keyword:
+        words = keyword.split()
+
+        if len(words) == 1:
+            # Single word — word boundary match
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            return bool(re.search(pattern, text_lower))
+
+        elif len(words) <= 3:
+            # Short phrase — exact substring (fast, precise)
             return keyword in text_lower
-        pattern = r'\b' + re.escape(keyword) + r'\b'
-        return bool(re.search(pattern, text_lower))
+
+        else:
+            # Long phrase — proximity match
+            return self._proximity_match(words, text_lower, window=10)
+
+    def _proximity_match(self, keyword_words: list[str], text_lower: str, window: int = 10) -> bool:
+        """
+        Checks whether all words in keyword_words appear in text_lower
+        within a sliding window of `window` words, in order.
+
+        Example:
+          keyword_words = ["share", "your", "data", "with"]
+          text = "share your personal data with advertisers"
+          window = 10
+          → True (all 4 words appear within 10 words of each other, in order)
+
+        Args:
+            keyword_words: List of words that must all appear in order
+            text_lower:    Lowercased clause text
+            window:        Max number of words allowed between first and last match
+        """
+        text_words = text_lower.split()
+        n = len(text_words)
+        kw_count = len(keyword_words)
+
+        for start in range(n - kw_count + 1):
+            segment = text_words[start: start + window]
+            ki = 0  # index into keyword_words
+            for word in segment:
+                if ki < kw_count and word == keyword_words[ki]:
+                    ki += 1
+            if ki == kw_count:
+                return True
+
+        return False
 
     def _is_negated(self, text_lower: str, matched_keywords: list[str]) -> bool:
         """
