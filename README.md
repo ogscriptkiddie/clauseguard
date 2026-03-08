@@ -76,44 +76,6 @@ Risky clauses highlighted in-page
 - Python 3.10+
 - Google Chrome (for the extension)
 
-### Backend
-
-```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/clauseguard.git
-cd clauseguard/backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate       # macOS / Linux
-venv\Scripts\activate          # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Download spaCy model
-python -m spacy download en_core_web_sm
-
-# Verify everything works (no server needed)
-python test_engine.py
-
-# Start the API server
-python app.py
-# → http://localhost:5000
-```
-
-### Test the API
-
-```bash
-curl http://localhost:5000/health
-
-curl -X POST http://localhost:5000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"text": "We may share your data with advertisers. You waive your right to a jury trial."}'
-```
-
----
-
 ## Repository Structure
 
 ```
