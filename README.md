@@ -147,4 +147,4 @@ Built as a capstone security research project at the University of the Fraser Va
 
 **Tanish Rathore** — Security Researcher | UFV Graduate | MSP Security Technician
 
-[LinkedIn](https://linkedin.com/in/YOUR_HANDLE) · [Portfolio](https://ogscriptkiddie.github.io/personal_portfolio/)
+[LinkedIn](https://linkedin.com/in/tanish-rathore) · [Portfolio](https://ogscriptkiddie.github.io/personal_portfolio/)
