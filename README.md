@@ -101,7 +101,7 @@ clauseguard/
 
 ## Background
 
-Built as a capstone security research project at the University of the Fraser Valley. ClauseGuard explores the intersection of NLP, cybersecurity risk modeling, and privacy rights — approaching legal document analysis as a defensive security problem.
+Built as a capstone security research project at the Simon Fraser University. ClauseGuard explores the intersection of NLP, cybersecurity risk modeling, and privacy rights — approaching legal document analysis as a defensive security problem.
 
 ---
 
