@@ -6,6 +6,11 @@
 const API_URL = "http://localhost:5000/analyze";
 
 const PLAIN_ENGLISH = {
+  content_rights: {
+    HIGH:   { icon: "🔴", title: "They own your content forever",      detail: "You've granted this company a permanent, irrevocable, royalty-free license to use everything you post — including for commercial purposes or AI training. Even if you delete it, the license may remain." },
+    MEDIUM: { icon: "🟠", title: "They have broad rights to your content", detail: "The company can reproduce, modify, and distribute your posts globally as part of running the service. This is common, but the scope varies — some agreements are far broader than needed." },
+    LOW:    { icon: "🟡", title: "Standard content hosting license",    detail: "A limited license to host and display your content, as needed to operate the service. This is expected and relatively low risk." },
+  },
   data_sharing: {
     HIGH:   { icon: "🔴", title: "They can sell your data",              detail: "This company explicitly reserves the right to sell your personal information to advertisers or data brokers. Your data becomes their product." },
     MEDIUM: { icon: "🟠", title: "They share your data with others",     detail: "Your personal information is shared with partner companies or advertisers. You may receive targeted ads or contact from third parties." },
@@ -46,7 +51,7 @@ const SCORE_TAGLINES = {
 
 const CAT_ORDER = [
   "data_sharing", "tracking_profiling", "third_party_access",
-  "data_retention", "arbitration", "liability_limitation"
+  "data_retention", "arbitration", "liability_limitation", "content_rights"
 ];
 
 // ── DOM ──────────────────────────────────────────────────────

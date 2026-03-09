@@ -1,41 +1,29 @@
 """
 categories.py — ClauseGuard Risk Category Definitions
 
-Each category has:
-  - label:       Human-readable name
-  - description: Short explanation
-  - weight:      Contribution to overall risk score (all weights sum to 1.0)
-  - rules:       Keyword lists per risk level (HIGH / MEDIUM / LOW)
+v3 — 7 categories. Patterns sourced from reading real ToS documents:
+     TikTok, Google, Meta, Spotify, Uber, Reddit, Snapchat, LinkedIn,
+     Discord, FaceApp, Amazon, Apple.
 
-Design principles:
-  HIGH   = direct, explicit harm to user data rights
-  MEDIUM = concerning but common industry practice — vague language that
-           obscures what they're actually doing
-  LOW    = present but relatively standard / disclosed language
-
-v2 — All patterns sourced from real ToS documents (Google, TikTok, Spotify,
-     Meta, Uber, Reddit, CapCut, LinkedIn). Legal language is deliberately
-     vague; this version catches the actual phrases lawyers use, not just
-     the blunt versions we might imagine.
+Key additions in v3:
+  - New category: content_rights (perpetual content licenses — completely
+    missing from v2 despite being in virtually every ToS)
+  - Expanded tracking_profiling with biometric collection, AI prompt logging,
+    in-app browser surveillance, unsent message collection
+  - Expanded data_sharing with sensitive personal information sharing patterns
+  - Tightened negation-safe patterns throughout
 """
 
 CATEGORIES: dict = {
 
     # ─── DATA SHARING ─────────────────────────────────────────────────────────
-    # How companies actually write sharing clauses:
-    # - Never say "sell" — instead "leverage", "facilitate commercial partnerships",
-    #   "share for business purposes", "provide to service providers and partners"
-    # - Vague beneficiaries: "select third parties", "trusted partners",
-    #   "corporate group", "affiliates and subsidiaries"
-    # - Merger clauses: data gets transferred if the company is acquired
-    # ─────────────────────────────────────────────────────────────────────────
     "data_sharing": {
         "label": "Data Sharing",
         "description": "Clauses authorizing sharing of user data with third parties",
-        "weight": 0.25,
+        "weight": 0.22,
         "rules": {
             "HIGH": [
-                # Explicit sale
+                # Explicit sale language
                 "sell your data",
                 "sell your information",
                 "sell personal data",
@@ -53,13 +41,26 @@ CATEGORIES: dict = {
                 "share for marketing purposes",
                 "share with content providers for marketing",
                 "registration data with",
-                # Monetization language
+                # Sensitive data sharing — these are HIGH because the data type is sensitive
+                "racial or ethnic origin",
+                "national origin",
+                "religious beliefs",
+                "mental or physical health diagnosis",
+                "sexual life or sexual orientation",
+                "sexual orientation",
+                "status as transgender",
+                "citizenship or immigration status",
+                "financial information",
+                "precise geolocation",
+                "sensitive personal information",
+                "biometric data",
+                # Monetization
                 "monetize your data",
                 "monetize your information",
                 "commercial partnerships",
                 "leverage your information",
                 "leverage personal data",
-                # Merger / acquisition transfers
+                # Merger / acquisition — data sold with the company
                 "disclosed to third parties in connection with a corporate transaction",
                 "merger, sale of assets",
                 "acquisition of all or a portion",
@@ -71,7 +72,7 @@ CATEGORIES: dict = {
                 "share your personal information with third parties for purposes of",
             ],
             "MEDIUM": [
-                # The standard "we share with partners" language
+                # Standard "we share with partners" language
                 "share with third parties",
                 "share with our partners",
                 "share with affiliates",
@@ -97,13 +98,22 @@ CATEGORIES: dict = {
                 "share data with service providers to help our advertisers",
                 "measure the effectiveness of their ads",
                 "measure the effectiveness of advertising",
-                # The "for business purposes" catch-all
+                # Collection about you from third parties (they buy your data)
+                "collect information about you from third-party services",
+                "receive information about you from",
+                "information about you from others",
+                "information provided to us by third parties",
+                # Contact syncing — accessing your address book
+                "sync your contacts",
+                "collect information from your device's phone book",
+                "friends list from your social network",
+                "match that information to users",
+                # Business purposes catch-all
                 "for business purposes",
                 "for commercial purposes",
                 "necessary to perform business operations",
             ],
             "LOW": [
-                # Standard service provider sharing (low risk — they need these)
                 "share with service providers",
                 "share with vendors",
                 "share aggregated data",
@@ -114,26 +124,41 @@ CATEGORIES: dict = {
                 "share with payment providers",
                 "share with identity verification",
                 "share with cloud hosting",
-                "service providers and business partners as necessary",
             ],
         },
     },
 
     # ─── TRACKING & PROFILING ─────────────────────────────────────────────────
-    # How companies actually write tracking clauses:
-    # - "collect information from third parties" = they buy your data from brokers
-    # - "mobile identifiers", "hashed email", "cookie identifiers" = cross-device tracking
-    # - "match you and your actions outside" = linking your identity across sites
-    # - "pre-uploading content" = collecting before you decide to post
-    # - "clipboard content" = reading your clipboard
-    # - "personalized experience" = profiling
-    # ─────────────────────────────────────────────────────────────────────────
     "tracking_profiling": {
         "label": "Tracking & Profiling",
-        "description": "Clauses enabling behavioral tracking or user profiling",
+        "description": "Clauses enabling behavioral tracking, biometric collection, or user profiling",
         "weight": 0.20,
         "rules": {
             "HIGH": [
+                # Biometric collection — faces, fingerprints, voice (HIGH: irreversible)
+                "face id",
+                "fingerprint id",
+                "facial recognition",
+                "facial, body or voice information",
+                "face and other body parts",
+                "biometric information",
+                "biometric identifiers",
+                "voiceprint",
+                "retina or iris scan",
+                "uniquely identifying a person",
+                "face scan",
+                # Surveillance-level collection
+                "collect all content you compose, send, or receive",
+                "content you compose, send, or receive",
+                "messages you compose but do not send",
+                "regardless of whether you choose to save or publish",
+                "pre-uploading at the time of creation",
+                "collect information about your interactions with websites when you use our in-app browser",
+                "in-app browser",
+                # AI prompt / interaction logging
+                "ai interactions, including prompts",
+                "prompts, questions, files, and other types of information that you submit",
+                "responses they generate",
                 # Cross-site / cross-app tracking
                 "behavioral profiling",
                 "cross-site tracking",
@@ -152,28 +177,33 @@ CATEGORIES: dict = {
                 "device fingerprinting",
                 "fingerprint your device",
                 "persistent identifier",
-                "link your identity",
+                # Device hardware identifiers — harder to change than cookies
+                "mac addresses",
+                "imei",
+                "sim serial number",
+                "hardware serial number",
+                # Collection even without account
+                "even if you are not a user",
+                "even if you do not have an account",
+                # Clipboard access
+                "clipboard content",
+                "accessed through your device's clipboard",
+                "access clipboard",
                 # Building profiles
                 "build a profile",
                 "build a detailed profile",
                 "infer sensitive attributes",
                 "infer information about you",
-                # Covert collection
-                "pre-uploading at the time of creation",
-                "clipboard content",
-                "accessed through your device's clipboard",
-                # Collecting data from third parties about you
-                "collect information about you from third-party services",
-                "advertisers, measurement and other partners share information with us about you",
+                "assign an age range and gender",
+                "infer age range and gender",
             ],
             "MEDIUM": [
-                # Targeted advertising (the main use of tracking)
+                # Targeted advertising
                 "personalized advertising",
                 "targeted advertising",
                 "behavioral advertising",
                 "interest-based advertising",
                 "serve you personalized ads",
-                "serve personalized ads where permitted",
                 "advertising partners",
                 "analytics partners",
                 "measurement and analytics services",
@@ -187,44 +217,52 @@ CATEGORIES: dict = {
                 "track purchases",
                 "browsing history",
                 "search history",
-                # Profiling for "personalization"
+                # Profiling via content analysis
+                "content characteristics and features",
+                "identifying objects and scenery",
+                "existence and location of a face",
+                "nature of the audio",
+                "text of words spoken",
+                # Location tracking
+                "precise location",
+                "gps",
+                "cell tower information",
+                "public wi-fi hotspots",
+                "approximate location",
+                "location information from your device",
+                # Personalization (profiling presented as a feature)
                 "personalize your experience",
                 "personalized recommendations",
                 "personalized content",
-                "content characteristics and features",
-                "identify objects and scenery",
-                "nature of the audio",
+                # Keystroke / interaction logging
+                "duration and frequency of your use",
+                "engagement with other users",
+                "how you interact with content and ads",
             ],
             "LOW": [
-                # Standard, disclosed analytics
                 "use cookies",
                 "analytics",
                 "log files",
                 "session data",
                 "usage data",
                 "improve our services",
-                "improve and develop the services",
                 "remember your preferences",
                 "ip address",
                 "device identifier",
                 "access dates and times",
                 "server logs",
+                "time zone settings",
+                "language settings",
+                "operating system",
             ],
         },
     },
 
     # ─── THIRD-PARTY ACCESS ───────────────────────────────────────────────────
-    # How companies actually write third-party access:
-    # - "law enforcement, public authorities" = government access
-    # - "good faith belief" = no warrant required
-    # - "corporate group" = data flows freely within conglomerate
-    # - "copyright holders" = DMCA-style access
-    # - Phrased as protection ("protect rights, safety") but grants wide access
-    # ─────────────────────────────────────────────────────────────────────────
     "third_party_access": {
         "label": "Third-Party Access",
         "description": "Clauses granting third parties access to user data or accounts",
-        "weight": 0.15,
+        "weight": 0.13,
         "rules": {
             "HIGH": [
                 # Government / law enforcement access
@@ -234,26 +272,32 @@ CATEGORIES: dict = {
                 "national security",
                 "intelligence agencies",
                 "government requests",
-                # The "good faith" loophole — no warrant needed
+                "authorities or regulators",
+                "law enforcement, governmental",
+                # "Good faith belief" — no warrant needed
                 "good faith belief",
                 "if we have good faith belief",
                 "if we believe it is necessary",
+                "if we reasonably believe",
                 # Broad access grants
                 "grant third parties access",
                 "third parties may access your",
                 "allow third parties to collect",
                 "third-party access to your account",
-                # Corporate group = wide access within conglomerate
+                # Corporate group = data flows within conglomerate freely
                 "entities within our corporate group",
                 "members of our corporate group",
                 "corporate group processes",
-                # Copyright holder access
-                "copyright holders",
-                "rights, property, and safety",
-                "protect the rights, property",
+                # Collection by others mentioning you
+                "information about you from others",
+                "included or mentioned in user content",
+                "contact information is provided to us",
+                # Foreign government access risk
+                "transfer to countries outside",
+                "international transfer",
+                "cross-border transfer of data",
             ],
             "MEDIUM": [
-                # Standard but concerning third-party integrations
                 "third-party services",
                 "integrated services",
                 "third-party applications",
@@ -262,17 +306,19 @@ CATEGORIES: dict = {
                 "third party may collect",
                 "third-party providers",
                 "business partners may",
-                "if you choose to sign-up or log-in using a third-party service",
                 "link your account to a third-party",
                 "third parties whose platforms are integrated",
-                # Tax and compliance
+                "sign-up or log-in using a third-party service",
+                # Compliance sharing
                 "tax authorities",
                 "regulatory authorities",
                 "public authorities, such as tax",
-                # Access for enforcement
+                # Enforcement access
                 "detect, investigate, and prevent",
                 "investigate potential violations",
                 "enforce our terms",
+                "protect the rights, property",
+                "copyright holders",
             ],
             "LOW": [
                 "third-party links",
@@ -285,17 +331,10 @@ CATEGORIES: dict = {
     },
 
     # ─── DATA RETENTION ───────────────────────────────────────────────────────
-    # How companies actually write retention clauses:
-    # - "as long as necessary" = forever, at their discretion
-    # - "legitimate business interest" = a reason they define themselves
-    # - "legal claims" = they keep data in case you sue them
-    # - "backup copies" = even if you delete, backups exist
-    # - "safety, security, and stability" = broad catch-all
-    # ─────────────────────────────────────────────────────────────────────────
     "data_retention": {
         "label": "Data Retention",
         "description": "Clauses specifying how long user data is kept",
-        "weight": 0.15,
+        "weight": 0.13,
         "rules": {
             "HIGH": [
                 "retain indefinitely",
@@ -306,11 +345,14 @@ CATEGORIES: dict = {
                 "retain after account deletion",
                 "retain after termination indefinitely",
                 "no deletion guarantee",
-                # The permanent catch-all
-                "not responsible for protecting the security of such information",
+                # Even non-users have data retained
+                "even if you are not a user, information about you",
+                "may not stop from getting and collecting data",
+                # Collecting before you decide to publish
+                "regardless of whether you choose to save or publish",
             ],
             "MEDIUM": [
-                # The "as long as necessary" language — common but vague
+                # The "as long as necessary" language — vague by design
                 "retain for as long as necessary",
                 "retain as long as necessary to provide",
                 "as long as necessary to provide the services",
@@ -322,18 +364,22 @@ CATEGORIES: dict = {
                 "may retain your data",
                 "retain for an extended period",
                 "stored even after deletion",
-                # "Legitimate interest" is defined by them
+                # "Legitimate interest" defined by them
                 "legitimate business interest",
                 "legitimate interests",
-                # They keep data for their own safety
+                # Safety/stability as retention justification
                 "safety, security and stability",
                 "enhancing its safety",
                 "improving and developing the services",
-                # Legal defense retention
+                # Legal defense — they keep data in case you sue
                 "exercise or defense of legal claims",
                 "for the exercise or defense",
                 "comply with legal obligations",
                 "comply with contractual and legal obligations",
+                # Derived data persists
+                "derived data may be retained",
+                "anonymized data may be retained",
+                "aggregated data may be retained",
             ],
             "LOW": [
                 "retain as required by law",
@@ -347,50 +393,39 @@ CATEGORIES: dict = {
     },
 
     # ─── ARBITRATION ──────────────────────────────────────────────────────────
-    # How companies actually write arbitration clauses:
-    # - Always in ALL CAPS (legal requirement, but easy to miss)
-    # - "individual basis" = no class actions
-    # - "THERE IS NO JUDGE OR JURY" — some actually write this
-    # - "waiving their respective rights" = both parties, but only users lose
-    # - "mandatory" + "binding" are the key danger words
-    # ─────────────────────────────────────────────────────────────────────────
     "arbitration": {
         "label": "Arbitration & Dispute Resolution",
         "description": "Clauses limiting user rights through mandatory arbitration",
-        "weight": 0.15,
+        "weight": 0.13,
         "rules": {
             "HIGH": [
-                # Explicit rights waivers
+                # Explicit jury/court waivers
                 "waive your right to a jury trial",
                 "waive right to jury",
                 "waiving their respective rights to a trial by jury",
                 "waive any right to a jury",
                 "right to a trial by jury",
+                "there is no judge or jury in arbitration",
+                "less discovery and appellate review than in court",
+                # Class action waivers
                 "class action waiver",
                 "waive right to class action",
                 "waive the right to participate in a class",
                 "no class arbitration",
-                "you give up your right",
-                "you are waiving",
-                "you waive any right",
-                # Direct language about arbitration being worse for users
-                "there is no judge or jury in arbitration",
-                "less discovery and appellate review than in court",
-                "less discovery than in court",
-                "in arbitration there is less",
-                # Individual-only, no collective action
-                "only in your individual capacity",
                 "not as a plaintiff or class member",
-                "individual basis to resolve disputes",
-                "rather than jury trials or any other court proceedings",
-                "rather than jury trials",
                 "or class actions of any kind",
-                # The binding mandatory language
+                "individual basis to resolve disputes",
+                "only in your individual capacity",
+                # Binding mandatory language
                 "binding arbitration",
                 "mandatory binding individual arbitration",
                 "mandatory arbitration provision",
                 "this agreement contains a mandatory arbitration",
                 "requires the use of arbitration",
+                "rather than jury trials",
+                "you give up your right",
+                "you are waiving",
+                "you waive any right",
             ],
             "MEDIUM": [
                 "mandatory arbitration",
@@ -405,31 +440,27 @@ CATEGORIES: dict = {
                 "consumer arbitration rules",
                 "american arbitration association",
                 "AAA rules",
+                "jams rules",
+                "informal dispute resolution",
+                "30-day notice period before arbitration",
             ],
             "LOW": [
                 "alternative dispute resolution",
                 "mediation",
                 "governing law",
                 "jurisdiction",
-                "arbitration preferred",
                 "small claims court",
                 "dispute resolution",
+                "applicable law",
             ],
         },
     },
 
     # ─── LIABILITY LIMITATION ─────────────────────────────────────────────────
-    # How companies actually write liability clauses:
-    # - "to the fullest extent permitted by applicable law" = as much as legally possible
-    # - "as is", "as available" = no guarantees at all
-    # - "express or implied" + "merchantability" = standard warranty disclaimer
-    # - "in no event shall" = strong exclusion language
-    # - Caps on damages: "sole remedy shall be replacement" or "fees paid"
-    # ─────────────────────────────────────────────────────────────────────────
     "liability_limitation": {
         "label": "Liability Limitation",
         "description": "Clauses limiting the company's legal liability to the user",
-        "weight": 0.10,
+        "weight": 0.09,
         "rules": {
             "HIGH": [
                 "not liable for any damages",
@@ -453,7 +484,7 @@ CATEGORIES: dict = {
                 "to the fullest extent permitted by applicable law",
                 "fullest extent permitted",
                 "to the fullest extent",
-                # No security guarantees
+                # Security not guaranteed
                 "100 percent secure",
                 "cannot be guaranteed to be 100",
                 "no data storage system",
@@ -471,7 +502,6 @@ CATEGORIES: dict = {
                 "no guarantees",
                 "fitness for a particular purpose",
                 "merchantability",
-                "not responsible for protecting the security",
                 "we are not responsible for",
                 "we cannot guarantee",
                 "we do not guarantee",
@@ -482,7 +512,81 @@ CATEGORIES: dict = {
                 "some jurisdictions do not allow",
                 "limitation of liability",
                 "certain state laws do not allow",
-                "if these laws apply to you",
+            ],
+        },
+    },
+
+    # ─── CONTENT RIGHTS ───────────────────────────────────────────────────────
+    # NEW in v3. One of the most overlooked but universal risks.
+    # Every major platform (Instagram, TikTok, Snapchat, YouTube, Reddit,
+    # LinkedIn) takes a broad license on everything you post. This license is:
+    #   - Perpetual (never expires, even after you delete it)
+    #   - Irrevocable (you can't take it back)
+    #   - Royalty-free (they don't pay you)
+    #   - Sublicensable (they can give it to others)
+    #   - Worldwide (including jurisdictions with weak privacy law)
+    #   - For any purpose including commercial use
+    # Most users have no idea they've signed this away.
+    # ─────────────────────────────────────────────────────────────────────────
+    "content_rights": {
+        "label": "Content & IP Rights",
+        "description": "Clauses granting the company broad rights over your content",
+        "weight": 0.10,
+        "rules": {
+            "HIGH": [
+                # The full perpetual license stack
+                "perpetual, irrevocable",
+                "irrevocable, nonexclusive, royalty-free",
+                "perpetual, royalty-free",
+                "royalty-free, worldwide",
+                "sublicensable license",
+                "transferable sub-licensable license",
+                "throughout the universe in perpetuity",
+                "in any and all media, now known or hereafter devised",
+                # Commercial use of your likeness
+                "commercial purposes",
+                "you will not be entitled to any compensation",
+                "without compensation to you",
+                "use your name, likeness",
+                "use your name, image",
+                "use your voice",
+                # AI training on your content
+                "train artificial intelligence",
+                "train ai models",
+                "train machine learning",
+                "use your content to train",
+                "use for machine learning",
+                "use content for research and development",
+                "use to improve our ai",
+            ],
+            "MEDIUM": [
+                # Standard content license (necessary but still worth flagging)
+                "grant us a license",
+                "you grant a license",
+                "license to use your content",
+                "worldwide license",
+                "non-exclusive license",
+                "royalty-free license",
+                "right to use, reproduce",
+                "right to display your content",
+                "right to distribute your content",
+                "right to create derivative works",
+                "right to modify your content",
+                "promote, exhibit, broadcast",
+                "publicly perform and publicly display",
+                "in connection with the platform",
+                # Derivative works — they can remix your content
+                "create derivative works from",
+                "derivative works based on",
+                "adapt or modify",
+            ],
+            "LOW": [
+                # Hosting license — genuinely needed to operate the service
+                "solely for the purpose of operating",
+                "solely to provide the service",
+                "limited license to host",
+                "as necessary to provide",
+                "in order to provide the services",
             ],
         },
     },
