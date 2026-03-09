@@ -208,3 +208,19 @@ def _deduplicate_and_filter(clauses: list[str]) -> list[str]:
             filtered.append(clause)
 
     return filtered
+
+
+def segment_document_numbered(text: str) -> list[dict]:
+    """
+    Same as segment_document but returns dicts with clause numbers.
+    Used by the API so the frontend can show users exactly which clause
+    to look for (e.g. "Clause 14 of 87").
+
+    Returns:
+        List of dicts: [{"clause_number": 1, "text": "..."}, ...]
+    """
+    clauses = segment_document(text)
+    return [
+        {"clause_number": i + 1, "text": clause}
+        for i, clause in enumerate(clauses)
+    ]

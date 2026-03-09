@@ -24,7 +24,7 @@ import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from segmenter import segment_document
+from segmenter import segment_document, segment_document_numbered
 from classifier import RuleBasedClassifier
 from scorer import compute_risk_score, generate_summary
 
@@ -128,16 +128,24 @@ def analyze():
 
     # --- Pipeline -----------------------------------------------------------
     try:
-        # Step 1: Segment document into clauses
-        clauses = segment_document(text)
-        logger.info(f"Segmented into {len(clauses)} clauses.")
+        # Step 1: Segment document into numbered clauses
+        numbered_clauses = segment_document_numbered(text)
+        total_clauses = len(numbered_clauses)
+        logger.info(f"Segmented into {total_clauses} clauses.")
 
-        if not clauses:
+        if not numbered_clauses:
             return _error("Document could not be segmented. Check input formatting.", 422)
 
-        # Step 2: Classify each clause
-        classified = classifier.classify_document(clauses)
+        # Step 2: Classify each clause — pass text only, keep number for reference
+        clause_texts = [c["text"] for c in numbered_clauses]
+        clause_numbers = {c["text"]: c["clause_number"] for c in numbered_clauses}
+
+        classified = classifier.classify_document(clause_texts)
         logger.info(f"Detected {len(classified)} risk-relevant clauses.")
+
+        # Attach clause number to each classified result
+        for result in classified:
+            result["clause_number"] = clause_numbers.get(result["text"], None)
 
         # Step 3: Compute risk score
         score_result = compute_risk_score(classified)
@@ -151,7 +159,7 @@ def analyze():
             "risk_score":                  score_result["overall_score"],
             "risk_level":                  score_result["overall_risk_level"],
             "summary":                     summary,
-            "total_clauses_analyzed":      len(clauses),
+            "total_clauses_analyzed":      total_clauses,
             "total_risk_clauses_detected": len(classified),
             "category_scores":             score_result["category_scores"],
             "clauses":                     classified,
