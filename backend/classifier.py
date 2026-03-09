@@ -30,9 +30,21 @@ logger = logging.getLogger(__name__)
 NEGATION_WINDOW = 10
 
 NEGATION_SIGNALS = [
-    "not", "never", "no", "don't", "do not", "will not", "won't",
-    "doesn't", "does not", "cannot", "can't", "shall not", "we don't",
-    "we do not", "we will not", "we never", "without",
+    # Multi-word subject+verb phrases — these are specific enough to be safe
+    "we do not", "we don't", "we will not", "we won't", "we never",
+    "we do not sell", "we do not share", "we will not sell", "we will not share",
+    "we do not collect", "we do not use", "we do not disclose",
+    "does not sell", "does not share", "does not collect",
+    "tiktok does not", "spotify does not", "we are not",
+    # Passive negations
+    "will not be shared", "will not be sold", "will not be used",
+    "is not shared", "is not sold", "are not shared", "are not sold",
+    "shall not be shared", "shall not be sold",
+    # Note: single words like "not", "no", "never", "without" are intentionally
+    # excluded. They cause false negations on legitimate risk language:
+    #   - "no warranty", "make no warranties" (liability disclaimers — HIGH risk)
+    #   - "without limitation" (liability language)
+    #   - "not liable" (liability language — should still be flagged)
 ]
 
 
@@ -245,24 +257,29 @@ class RuleBasedClassifier:
         """
         Checks whether matched keywords appear in a negated context.
 
-        Strategy: For each matched keyword, look at the N words immediately
-        before it in the text. If any negation signal appears in that window,
-        consider the match negated.
-
-        This is deliberately simple — it catches the most common ToS negation
-        patterns ("we do not sell", "we never share") without false positives.
+        Two strategies:
+          1. Window check: look 10 words before each keyword for a negation signal
+          2. Sentence-start check: if the clause opens with a negation signal
+             (within first 6 words), treat the whole clause as negated.
+             This catches long sentences like "We do not sell... [13 words] ...
+             cross-context behavioral advertising" where the window misses it.
         """
         words = text_lower.split()
 
+        # Strategy 2: sentence-start negation (catches long clauses)
+        sentence_start = ' '.join(words[:6])
+        for signal in NEGATION_SIGNALS:
+            if signal in sentence_start:
+                return True
+
+        # Strategy 1: window before each keyword match
         for keyword in matched_keywords:
             keyword_lower = keyword.lower()
-            # Find positions of this keyword in the word list
             keyword_words = keyword_lower.split()
             n = len(keyword_words)
 
             for i in range(len(words) - n + 1):
                 if words[i:i + n] == keyword_words:
-                    # Look at the window before this match
                     window_start = max(0, i - NEGATION_WINDOW)
                     window = ' '.join(words[window_start:i])
 

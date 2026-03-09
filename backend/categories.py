@@ -7,116 +7,253 @@ Each category has:
   - weight:      Contribution to overall risk score (all weights sum to 1.0)
   - rules:       Keyword lists per risk level (HIGH / MEDIUM / LOW)
 
-Design principle:
+Design principles:
   HIGH   = direct, explicit harm to user data rights
-  MEDIUM = concerning but common industry practice
+  MEDIUM = concerning but common industry practice — vague language that
+           obscures what they're actually doing
   LOW    = present but relatively standard / disclosed language
+
+v2 — All patterns sourced from real ToS documents (Google, TikTok, Spotify,
+     Meta, Uber, Reddit, CapCut, LinkedIn). Legal language is deliberately
+     vague; this version catches the actual phrases lawyers use, not just
+     the blunt versions we might imagine.
 """
 
 CATEGORIES: dict = {
 
+    # ─── DATA SHARING ─────────────────────────────────────────────────────────
+    # How companies actually write sharing clauses:
+    # - Never say "sell" — instead "leverage", "facilitate commercial partnerships",
+    #   "share for business purposes", "provide to service providers and partners"
+    # - Vague beneficiaries: "select third parties", "trusted partners",
+    #   "corporate group", "affiliates and subsidiaries"
+    # - Merger clauses: data gets transferred if the company is acquired
+    # ─────────────────────────────────────────────────────────────────────────
     "data_sharing": {
         "label": "Data Sharing",
         "description": "Clauses authorizing sharing of user data with third parties",
         "weight": 0.25,
         "rules": {
             "HIGH": [
+                # Explicit sale
                 "sell your data",
                 "sell your information",
                 "sell personal data",
                 "sell user data",
                 "sell to third parties",
-                "share with advertisers",
-                "with advertisers",
-                "share your data with",
-                "share your personal data with",
-                "share your information with",
-                "monetize your data",
+                "sale of personal information",
                 "data broker",
-                "sold to partners",
+                # Advertising-specific sharing
+                "share with advertisers",
+                "provide to advertisers",
+                "share your data with advertisers",
+                "advertising partners, data providers",
+                "data providers, and analytics providers",
+                "share for advertising purposes",
+                "share for marketing purposes",
+                "share with content providers for marketing",
+                "registration data with",
+                # Monetization language
+                "monetize your data",
+                "monetize your information",
+                "commercial partnerships",
+                "leverage your information",
+                "leverage personal data",
+                # Merger / acquisition transfers
+                "disclosed to third parties in connection with a corporate transaction",
+                "merger, sale of assets",
+                "acquisition of all or a portion",
+                "reorganization, financing",
+                "in the event of a sale",
+                "transfer in connection with",
+                # Cross-context behavioral advertising
+                "cross-context behavioral advertising",
+                "share your personal information with third parties for purposes of",
             ],
             "MEDIUM": [
+                # The standard "we share with partners" language
                 "share with third parties",
                 "share with our partners",
                 "share with affiliates",
-                "share your information",
+                "share with business partners",
+                "share with select third parties",
+                "share with trusted third parties",
+                "share your information with",
                 "share personal data",
+                "share information about you",
                 "disclose to third parties",
                 "disclose personal information",
+                "disclose your information",
                 "transfer to third parties",
                 "transfer your data",
-                "disclosed to partners",
+                "provide to third parties",
+                "provide to our partners",
+                "share with members of our corporate group",
+                "entities within our corporate group",
+                "share with subsidiaries",
+                "affiliates and subsidiaries",
+                # Measurement / analytics sharing
+                "share with measurement partners",
+                "share data with service providers to help our advertisers",
+                "measure the effectiveness of their ads",
+                "measure the effectiveness of advertising",
+                # The "for business purposes" catch-all
+                "for business purposes",
+                "for commercial purposes",
+                "necessary to perform business operations",
             ],
             "LOW": [
+                # Standard service provider sharing (low risk — they need these)
                 "share with service providers",
                 "share with vendors",
                 "share aggregated data",
                 "share anonymized data",
                 "share non-personal information",
                 "share de-identified",
+                "aggregate or de-identify",
+                "share with payment providers",
+                "share with identity verification",
+                "share with cloud hosting",
+                "service providers and business partners as necessary",
             ],
         },
     },
 
+    # ─── TRACKING & PROFILING ─────────────────────────────────────────────────
+    # How companies actually write tracking clauses:
+    # - "collect information from third parties" = they buy your data from brokers
+    # - "mobile identifiers", "hashed email", "cookie identifiers" = cross-device tracking
+    # - "match you and your actions outside" = linking your identity across sites
+    # - "pre-uploading content" = collecting before you decide to post
+    # - "clipboard content" = reading your clipboard
+    # - "personalized experience" = profiling
+    # ─────────────────────────────────────────────────────────────────────────
     "tracking_profiling": {
         "label": "Tracking & Profiling",
         "description": "Clauses enabling behavioral tracking or user profiling",
         "weight": 0.20,
         "rules": {
             "HIGH": [
+                # Cross-site / cross-app tracking
                 "behavioral profiling",
                 "cross-site tracking",
                 "track across websites",
                 "track across apps",
-                "build a profile",
-                "infer sensitive attributes",
+                "track your activity across",
+                "track you across",
+                "activities on other websites and apps",
+                "actions outside of the platform",
+                "actions you have taken outside",
+                # Identity matching across devices/sites
+                "match you and your actions",
+                "mobile identifiers for advertising",
+                "hashed email addresses and phone numbers",
+                "cookie identifiers",
                 "device fingerprinting",
                 "fingerprint your device",
                 "persistent identifier",
-                "track your activity across",
+                "link your identity",
+                # Building profiles
+                "build a profile",
+                "build a detailed profile",
+                "infer sensitive attributes",
+                "infer information about you",
+                # Covert collection
+                "pre-uploading at the time of creation",
+                "clipboard content",
+                "accessed through your device's clipboard",
+                # Collecting data from third parties about you
+                "collect information about you from third-party services",
+                "advertisers, measurement and other partners share information with us about you",
             ],
             "MEDIUM": [
-                "track your usage",
-                "track your activity",
+                # Targeted advertising (the main use of tracking)
                 "personalized advertising",
                 "targeted advertising",
                 "behavioral advertising",
                 "interest-based advertising",
+                "serve you personalized ads",
+                "serve personalized ads where permitted",
                 "advertising partners",
                 "analytics partners",
+                "measurement and analytics services",
+                # Standard tracking tech
+                "track your usage",
+                "track your activity",
                 "web beacons",
                 "pixel tags",
+                "tracking technologies",
                 "track clicks",
                 "track purchases",
+                "browsing history",
+                "search history",
+                # Profiling for "personalization"
+                "personalize your experience",
+                "personalized recommendations",
+                "personalized content",
+                "content characteristics and features",
+                "identify objects and scenery",
+                "nature of the audio",
             ],
             "LOW": [
+                # Standard, disclosed analytics
                 "use cookies",
                 "analytics",
                 "log files",
                 "session data",
                 "usage data",
                 "improve our services",
+                "improve and develop the services",
                 "remember your preferences",
+                "ip address",
+                "device identifier",
+                "access dates and times",
+                "server logs",
             ],
         },
     },
 
+    # ─── THIRD-PARTY ACCESS ───────────────────────────────────────────────────
+    # How companies actually write third-party access:
+    # - "law enforcement, public authorities" = government access
+    # - "good faith belief" = no warrant required
+    # - "corporate group" = data flows freely within conglomerate
+    # - "copyright holders" = DMCA-style access
+    # - Phrased as protection ("protect rights, safety") but grants wide access
+    # ─────────────────────────────────────────────────────────────────────────
     "third_party_access": {
         "label": "Third-Party Access",
         "description": "Clauses granting third parties access to user data or accounts",
         "weight": 0.15,
         "rules": {
             "HIGH": [
-                "grant third parties access",
-                "third parties may access your",
-                "allow third parties to collect",
-                "third-party access to your account",
+                # Government / law enforcement access
+                "law enforcement agencies, public authorities",
                 "government access",
                 "law enforcement access without notice",
                 "national security",
                 "intelligence agencies",
+                "government requests",
+                # The "good faith" loophole — no warrant needed
+                "good faith belief",
+                "if we have good faith belief",
+                "if we believe it is necessary",
+                # Broad access grants
+                "grant third parties access",
+                "third parties may access your",
+                "allow third parties to collect",
+                "third-party access to your account",
+                # Corporate group = wide access within conglomerate
+                "entities within our corporate group",
+                "members of our corporate group",
+                "corporate group processes",
+                # Copyright holder access
+                "copyright holders",
+                "rights, property, and safety",
+                "protect the rights, property",
             ],
             "MEDIUM": [
+                # Standard but concerning third-party integrations
                 "third-party services",
                 "integrated services",
                 "third-party applications",
@@ -125,16 +262,36 @@ CATEGORIES: dict = {
                 "third party may collect",
                 "third-party providers",
                 "business partners may",
+                "if you choose to sign-up or log-in using a third-party service",
+                "link your account to a third-party",
+                "third parties whose platforms are integrated",
+                # Tax and compliance
+                "tax authorities",
+                "regulatory authorities",
+                "public authorities, such as tax",
+                # Access for enforcement
+                "detect, investigate, and prevent",
+                "investigate potential violations",
+                "enforce our terms",
             ],
             "LOW": [
                 "third-party links",
                 "external websites",
                 "third-party content",
                 "linked services",
+                "third-party platforms",
             ],
         },
     },
 
+    # ─── DATA RETENTION ───────────────────────────────────────────────────────
+    # How companies actually write retention clauses:
+    # - "as long as necessary" = forever, at their discretion
+    # - "legitimate business interest" = a reason they define themselves
+    # - "legal claims" = they keep data in case you sue them
+    # - "backup copies" = even if you delete, backups exist
+    # - "safety, security, and stability" = broad catch-all
+    # ─────────────────────────────────────────────────────────────────────────
     "data_retention": {
         "label": "Data Retention",
         "description": "Clauses specifying how long user data is kept",
@@ -149,15 +306,34 @@ CATEGORIES: dict = {
                 "retain after account deletion",
                 "retain after termination indefinitely",
                 "no deletion guarantee",
+                # The permanent catch-all
+                "not responsible for protecting the security of such information",
             ],
             "MEDIUM": [
+                # The "as long as necessary" language — common but vague
                 "retain for as long as necessary",
+                "retain as long as necessary to provide",
+                "as long as necessary to provide the services",
+                "for as long as necessary",
+                # Retention after closure
                 "retain after account closure",
                 "backup copies may persist",
                 "retain for business purposes",
                 "may retain your data",
                 "retain for an extended period",
                 "stored even after deletion",
+                # "Legitimate interest" is defined by them
+                "legitimate business interest",
+                "legitimate interests",
+                # They keep data for their own safety
+                "safety, security and stability",
+                "enhancing its safety",
+                "improving and developing the services",
+                # Legal defense retention
+                "exercise or defense of legal claims",
+                "for the exercise or defense",
+                "comply with legal obligations",
+                "comply with contractual and legal obligations",
             ],
             "LOW": [
                 "retain as required by law",
@@ -165,25 +341,56 @@ CATEGORIES: dict = {
                 "retain for a limited period",
                 "deleted upon request",
                 "retention policy",
+                "deleted and not retained",
             ],
         },
     },
 
+    # ─── ARBITRATION ──────────────────────────────────────────────────────────
+    # How companies actually write arbitration clauses:
+    # - Always in ALL CAPS (legal requirement, but easy to miss)
+    # - "individual basis" = no class actions
+    # - "THERE IS NO JUDGE OR JURY" — some actually write this
+    # - "waiving their respective rights" = both parties, but only users lose
+    # - "mandatory" + "binding" are the key danger words
+    # ─────────────────────────────────────────────────────────────────────────
     "arbitration": {
         "label": "Arbitration & Dispute Resolution",
         "description": "Clauses limiting user rights through mandatory arbitration",
         "weight": 0.15,
         "rules": {
             "HIGH": [
+                # Explicit rights waivers
                 "waive your right to a jury trial",
                 "waive right to jury",
+                "waiving their respective rights to a trial by jury",
+                "waive any right to a jury",
+                "right to a trial by jury",
                 "class action waiver",
                 "waive right to class action",
-                "binding arbitration",
-                "you waive any right",
                 "waive the right to participate in a class",
                 "no class arbitration",
                 "you give up your right",
+                "you are waiving",
+                "you waive any right",
+                # Direct language about arbitration being worse for users
+                "there is no judge or jury in arbitration",
+                "less discovery and appellate review than in court",
+                "less discovery than in court",
+                "in arbitration there is less",
+                # Individual-only, no collective action
+                "only in your individual capacity",
+                "not as a plaintiff or class member",
+                "individual basis to resolve disputes",
+                "rather than jury trials or any other court proceedings",
+                "rather than jury trials",
+                "or class actions of any kind",
+                # The binding mandatory language
+                "binding arbitration",
+                "mandatory binding individual arbitration",
+                "mandatory arbitration provision",
+                "this agreement contains a mandatory arbitration",
+                "requires the use of arbitration",
             ],
             "MEDIUM": [
                 "mandatory arbitration",
@@ -192,6 +399,12 @@ CATEGORIES: dict = {
                 "submit to arbitration",
                 "resolve disputes through arbitration",
                 "arbitration shall be final",
+                "will be determined by mandatory",
+                "arbitration is more informal than a lawsuit",
+                "federal arbitration act",
+                "consumer arbitration rules",
+                "american arbitration association",
+                "AAA rules",
             ],
             "LOW": [
                 "alternative dispute resolution",
@@ -199,10 +412,20 @@ CATEGORIES: dict = {
                 "governing law",
                 "jurisdiction",
                 "arbitration preferred",
+                "small claims court",
+                "dispute resolution",
             ],
         },
     },
 
+    # ─── LIABILITY LIMITATION ─────────────────────────────────────────────────
+    # How companies actually write liability clauses:
+    # - "to the fullest extent permitted by applicable law" = as much as legally possible
+    # - "as is", "as available" = no guarantees at all
+    # - "express or implied" + "merchantability" = standard warranty disclaimer
+    # - "in no event shall" = strong exclusion language
+    # - Caps on damages: "sole remedy shall be replacement" or "fees paid"
+    # ─────────────────────────────────────────────────────────────────────────
     "liability_limitation": {
         "label": "Liability Limitation",
         "description": "Clauses limiting the company's legal liability to the user",
@@ -217,22 +440,49 @@ CATEGORIES: dict = {
                 "exclude all liability",
                 "maximum liability shall not exceed",
                 "not liable for any loss",
+                # Full disclaimer language
+                "make no warranties, express or implied",
+                "no warranties, express or implied",
+                "express or implied warranty",
+                "express or implied, with respect to",
+                # Caps on what they owe you
+                "your sole remedy",
+                "our sole liability shall be",
+                "sole remedy, and our sole liability",
+                # The "fullest extent" catch-all
+                "to the fullest extent permitted by applicable law",
+                "fullest extent permitted",
+                "to the fullest extent",
+                # No security guarantees
+                "100 percent secure",
+                "cannot be guaranteed to be 100",
+                "no data storage system",
+                "transmission of data over the internet",
             ],
             "MEDIUM": [
                 "limit our liability",
                 "not responsible for any loss",
                 "provided as is",
                 "provided as-is",
+                "as is and as available",
                 "without warranty",
                 "we do not warrant",
                 "we make no representations",
                 "no guarantees",
+                "fitness for a particular purpose",
+                "merchantability",
+                "not responsible for protecting the security",
+                "we are not responsible for",
+                "we cannot guarantee",
+                "we do not guarantee",
             ],
             "LOW": [
                 "liability limited to fees paid",
                 "to the extent permitted by law",
                 "some jurisdictions do not allow",
                 "limitation of liability",
+                "certain state laws do not allow",
+                "if these laws apply to you",
             ],
         },
     },
