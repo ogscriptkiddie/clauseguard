@@ -1,20 +1,10 @@
 # ClauseGuard Backend Dependencies
 # Install with: pip install -r requirements.txt
 
-# Web framework
 flask==3.0.3
 flask-cors==4.0.1
-
-# NLP - segmentation (preferred sentence splitter)
-# After installing, run: python -m spacy download en_core_web_sm
 spacy>=3.8.0
-
-# ML classifier (Phase 2)
 scikit-learn==1.5.1
 numpy==1.26.4
-
-# NLP utilities (Phase 2 fallback / tokenization)
 nltk==3.8.1
-
-# Production server (use instead of flask dev server when deploying)
 gunicorn==22.0.0
