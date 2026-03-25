@@ -5,7 +5,7 @@
 <img src="https://img.shields.io/badge/Status-Phase%202%20Complete-22c55e?style=for-the-badge&logo=checkmarx&logoColor=white"/>
 <img src="https://img.shields.io/badge/Python-3.10+-3b82f6?style=for-the-badge&logo=python&logoColor=white"/>
 <img src="https://img.shields.io/badge/Chrome-Extension-f97316?style=for-the-badge&logo=googlechrome&logoColor=white"/>
-<img src="https://img.shields.io/badge/Flask-Backend-64748b?style=for-the-badge&logo=flask&logoColor=white"/>
+<img src="https://img.shields.io/badge/Backend-Live%20on%20Railway-7c3aed?style=for-the-badge&logo=railway&logoColor=white"/>
 <img src="https://img.shields.io/badge/License-MIT-a855f7?style=for-the-badge"/>
 
 <br/>
@@ -22,9 +22,24 @@ flagging the risks ordinary users never see before clicking "I Agree."*
 [![Rules](https://img.shields.io/badge/Classifier-757%20Rules-7c3aed?style=flat-square)](backend/categories.py)
 [![Documents](https://img.shields.io/badge/Documents-12%20Processed-0891b2?style=flat-square)](data/raw/)
 [![Categories](https://img.shields.io/badge/Risk%20Categories-7-16a34a?style=flat-square)](backend/categories.py)
+[![API](https://img.shields.io/badge/API-Live-22c55e?style=flat-square)](https://clauseguard-production-183f.up.railway.app/health)
 [![SFU](https://img.shields.io/badge/Simon%20Fraser%20University-Capstone-dc2626?style=flat-square)](https://www.sfu.ca/)
 
 </div>
+
+---
+
+## 🌐 Live Deployment
+
+The backend API is deployed and publicly accessible — no local setup required to use the extension.
+
+| Service | URL | Status |
+|---|---|---|
+| **Backend API** | `https://clauseguard-production-183f.up.railway.app` | 🟢 Live |
+| **Health Check** | [`/health`](https://clauseguard-production-183f.up.railway.app/health) | 🟢 Online |
+| **Analyze Endpoint** | `POST /analyze` | 🟢 Ready |
+
+> The Chrome Extension points directly to this hosted API. Once you install the extension, it works without running anything locally.
 
 ---
 
@@ -54,7 +69,8 @@ The average Terms of Service document is **~8,000 words** long. Nobody reads the
 │         Chrome Extension detects the document               │
 │              (4-signal heuristic + MutationObserver)        │
 │                           │                                 │
-│         Flask API receives the full document text           │
+│     Hosted Flask API receives the full document text        │
+│       (Railway — clauseguard-production-183f.railway.app)   │
 │                           │                                 │
 │       spaCy Segmenter splits it into legal clauses          │
 │                           │                                 │
@@ -97,6 +113,7 @@ The average Terms of Service document is **~8,000 words** long. Nobody reads the
 |---|---|---|
 | ![Chrome](https://img.shields.io/badge/-Chrome%20Extension-f97316?style=flat-square&logo=googlechrome&logoColor=white) | JavaScript · Manifest V3 | ToS detection, badge alerts, popup UI |
 | ![Flask](https://img.shields.io/badge/-Flask%20API-64748b?style=flat-square&logo=flask&logoColor=white) | Python · Flask | REST backend — `/analyze` endpoint |
+| ![Railway](https://img.shields.io/badge/-Railway-7c3aed?style=flat-square&logo=railway&logoColor=white) | Railway.app | Cloud hosting — always-on, no local server needed |
 | ![spaCy](https://img.shields.io/badge/-spaCy-09a3d5?style=flat-square) | spaCy NLP | Document → legal clause segmentation |
 | ![Rules](https://img.shields.io/badge/-Rule%20Engine-7c3aed?style=flat-square) | Custom Python | 757-rule keyword classifier with negation detection |
 | ![ML](https://img.shields.io/badge/-ML%20Classifier-2563eb?style=flat-square&logo=scikitlearn&logoColor=white) | scikit-learn | TF-IDF + Logistic Regression *(Phase 3)* |
@@ -113,7 +130,7 @@ The average Terms of Service document is **~8,000 words** long. Nobody reads the
 | Phase | Status | Description |
 |---|:---:|---|
 | **Phase 1** · Backend Engine | ✅ **Complete** | Flask API, spaCy segmenter, rule-based classifier (757 rules), risk scorer |
-| **Phase 2** · Extension + Dataset | ✅ **Complete** | MV3 extension, popup UI, badge alerts, SPA detection, 214-clause annotated dataset |
+| **Phase 2** · Extension + Dataset | ✅ **Complete** | MV3 extension, popup UI, badge alerts, SPA detection, 214-clause annotated dataset, Railway deployment |
 | **Phase 3** · ML Classifier | 🔄 **In Progress** | scikit-learn model, hybrid pipeline, inter-rater reliability check |
 | **Phase 4** · Evaluation | 🔜 **Planned** | F1 / precision / recall vs. rule-based baseline, user study (n = 10) |
 
@@ -121,91 +138,85 @@ The average Terms of Service document is **~8,000 words** long. Nobody reads the
 
 ---
 
-## 🚀 Local Setup
+## 🚀 Quick Start — Install the Extension
 
-### Prerequisites
+The backend is already live. You just need to install the extension.
 
-Make sure you have the following installed:
-
-- <kbd>Python 3.10+</kbd> — [python.org](https://www.python.org/downloads/)
-- <kbd>Git</kbd> — [git-scm.com](https://git-scm.com/)
-- <kbd>Google Chrome</kbd>
-
----
-
-### Step 1 — Clone the repository
-
-Open **Git Bash** and run:
+### Option A — Load from this repo (Developer Mode)
 
 ```bash
 git clone https://github.com/ogscriptkiddie/clauseguard.git
-cd clauseguard
 ```
+
+1. Open Chrome → go to `chrome://extensions`
+2. Toggle **Developer mode** ON (top right)
+3. Click **Load unpacked** → select the `extension/` folder
+4. The ClauseGuard 🛡️ icon appears in your toolbar
+
+Navigate to any ToS page — the extension calls the live hosted API automatically.
+
+### Option B — Chrome Web Store *(coming soon)*
+
+> Store submission in progress. Will be available at the Chrome Web Store.
 
 ---
 
-### Step 2 — Set up a virtual environment
+## 🧪 Test It
 
-```bash
-cd backend
-python -m venv venv
-source venv/Scripts/activate      # Git Bash on Windows
-# If that fails, try:
-# source venv/bin/activate        # macOS / Linux
-```
-
-You should see `(venv)` appear at the start of your prompt.
-
----
-
-### Step 3 — Install dependencies
-
-```bash
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
-```
-
----
-
-### Step 4 — Start the Flask backend
-
-```bash
-python app.py
-```
-
-You should see:
-```
- * Running on http://127.0.0.1:5000
- * Debug mode: on
-```
-
-Leave this terminal running.
-
----
-
-### Step 5 — Load the Chrome Extension
-
-1. Open **Chrome** and go to <kbd>chrome://extensions</kbd>
-2. Toggle **Developer mode** ON (switch in the top-right corner)
-3. Click **Load unpacked**
-4. Navigate to your cloned folder and select the **`extension/`** directory
-5. The ClauseGuard shield icon 🛡️ appears in your Chrome toolbar
-
----
-
-### Step 6 — Test it
-
-Navigate to any Terms of Service or Privacy Policy page, for example:
+Once the extension is installed, try these pages:
 
 ```
-https://www.spotify.com/us/legal/end-user-agreement/
 https://discord.com/privacy
+https://www.spotify.com/us/legal/end-user-agreement/
 https://policies.google.com/terms
+https://www.amazon.ca/gp/help/customer/display.html?nodeId=GLSBYFE9MGKKQXXM
 ```
 
-- The **red `!` badge** fires on the icon when a document is detected
-- Click the icon to open the **risk card popup**
-- Press **Scan This Page** to analyze the document
+- The **red `!` badge** fires when a ToS/Privacy Policy is detected
+- Click the icon → **Scan This Page**
+- Risk cards appear with plain-English summaries and the actual clause text
+
+---
+
+## 🖥️ Local Development Setup
+
+Only needed if you want to modify the backend. The extension works out of the box with the hosted API.
+
+### Prerequisites
+
+- <kbd>Python 3.13</kbd> — use `py` on Windows
+- <kbd>Git</kbd>
+- <kbd>Google Chrome</kbd>
+
+### Run the backend locally
+
+```bash
+git clone https://github.com/ogscriptkiddie/clauseguard.git
+cd clauseguard/backend
+
+# Create virtual environment
+py -3.13 -m venv venv
+source venv/Scripts/activate        # Git Bash on Windows
+# source venv/bin/activate          # macOS / Linux
+
+# Install dependencies
+pip install -r requirements.txt --only-binary :all:
+py -m spacy download en_core_web_sm
+
+# Start the server
+py app.py
+# → Running on http://127.0.0.1:5000
+```
+
+To point the extension at your local backend instead of Railway, change line 6 in `extension/popup.js`:
+
+```javascript
+// Local development
+const API_URL = 'http://127.0.0.1:5000';
+
+// Production (default)
+const API_URL = 'https://clauseguard-production-183f.up.railway.app';
+```
 
 ---
 
@@ -214,48 +225,49 @@ https://policies.google.com/terms
 
 <br/>
 
-**Backend not running / extension shows no results**
-```bash
-# Make sure the virtual environment is active and backend is running
-cd clauseguard/backend
-source venv/Scripts/activate
-python app.py
+**Extension shows "Analysis failed" or HTTP error**
+```
+→ Check https://clauseguard-production-183f.up.railway.app/health
+→ Should return: {"status": "ok"}
+→ If not, the Railway service may be waking up — wait 10 seconds and retry
 ```
 
-**spaCy model missing**
-```bash
-python -m spacy download en_core_web_sm
+**Badge not appearing on a ToS page**
+```
+→ Hard-refresh the page: Ctrl+Shift+R
+→ Make sure the URL contains: terms, privacy, legal, or conditions
+→ Try: discord.com/privacy — always reliably detected
 ```
 
-**Extension not detecting the page**
-- Hard-refresh the page after loading the extension (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>)
-- Make sure the URL contains ToS-related keywords (terms, privacy, legal, conditions)
-
-**Port conflict on 5000**
+**spaCy model missing (local dev only)**
 ```bash
-# Run on a different port
-python app.py --port 5001
-# Then update the API URL in popup.js to match
+py -m spacy download en_core_web_sm
+```
+
+**Extension not updating after code changes**
+```
+→ chrome://extensions → click ↻ refresh on ClauseGuard
+→ Hard-refresh the test page
 ```
 
 </details>
 
 <details>
-<summary><b>🔄 Updating the extension after code changes</b></summary>
+<summary><b>🔄 Deploying backend changes</b></summary>
 
 <br/>
 
-After modifying any JavaScript files in `extension/`:
+The backend auto-deploys to Railway on every push to `main`:
 
-1. Go to <kbd>chrome://extensions</kbd>
-2. Find ClauseGuard and click the **refresh icon** ↻
-3. Hard-refresh the page you're testing on
-
-After modifying Python backend files, restart the Flask server:
 ```bash
-# Ctrl+C to stop, then:
-python app.py
+# Make your changes to backend/
+git add .
+git commit -m "Your change description"
+git push
+# → Railway detects the push and redeploys automatically
 ```
+
+Extension changes require reloading via `chrome://extensions` locally, or a new store submission if published.
 
 </details>
 
@@ -272,6 +284,8 @@ clauseguard/
 │   ├── segmenter.py        ← Document → clause segmentation (spaCy)
 │   ├── classifier.py       ← Rule-based classifier with negation detection
 │   ├── scorer.py           ← Weighted 0–100 risk scoring engine
+│   ├── Procfile            ← Railway start command
+│   ├── runtime.txt         ← Python version for Railway
 │   └── requirements.txt
 │
 ├── 📂 extension/
@@ -295,7 +309,7 @@ clauseguard/
 
 ## 📚 Dataset
 
-The annotation dataset covers **12 documents** from major platforms across two document types:
+The annotation dataset covers **12 documents** from major platforms:
 
 <div align="center">
 
@@ -308,8 +322,7 @@ The annotation dataset covers **12 documents** from major platforms across two d
 
 </div>
 
-> ⚠️ **TikTok ToS** was planned for Phase 2 but the official URL returned a 404 error at collection time.
-> It will be processed in Phase 3 to strengthen the arbitration and content-rights categories.
+> ⚠️ **TikTok ToS** was planned for Phase 2 but the official URL returned a 404 error at collection time. It will be processed in Phase 3 to strengthen the arbitration and content-rights categories.
 
 ---
 
@@ -338,5 +351,5 @@ ClauseGuard sits at the intersection of NLP, cybersecurity risk modeling, and pr
 ---
 
 <div align="center">
-<sub>Built with Python · Flask · spaCy · Chrome Extensions API · scikit-learn</sub>
+<sub>Built with Python · Flask · spaCy · Chrome Extensions API · scikit-learn · Hosted on Railway</sub>
 </div>
