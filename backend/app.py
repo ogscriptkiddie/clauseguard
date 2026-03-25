@@ -33,7 +33,7 @@ from scorer import compute_risk_score, generate_summary
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
-CORS(app)  # Allow all origins — restrict this to your extension ID in prod
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 logging.basicConfig(
     level=logging.INFO,
