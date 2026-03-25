@@ -119,7 +119,7 @@ async function run() {
   // Call Flask API
   let data;
   try {
-    const res = await fetch(API_URL, {
+    const res = await fetch(`${API_URL}/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: extracted.text }),
