@@ -296,6 +296,10 @@ CATEGORIES: dict = {
                 "we may receive information about you",
                 "when you take certain actions on other sites",
                 "actions on other sites",
+                # Microsoft Xbox: gameplay tracked and shared with game devs/publishers (microsoft_tos)
+                "information about your game play, activities and usage of games and xbox services will be tracked and shared",
+                "tracked and shared with applicable third parties, including game developers and publishers",
+                "information about your game play, activities and usage of games and xbox services will be tracked and shared with applicable third parties",
                 # Meta Audience Network and off-platform tracking
                 "identify you as a meta product user",
                 "information from third parties to tailor the ads you see",
@@ -366,6 +370,10 @@ CATEGORIES: dict = {
                 "customizing your experience on discord",
                 "customize your experience on discord",
                 "personalized recommendations",
+                # Google: automated systems analyze content for profiling/personalization (google_005 HIGH)
+                "using automated systems and algorithms to analyze your content",
+                "to customize our services for you, such as providing recommendations and personalized search results, content, and ads",
+                "recognize patterns in data",
                 # LinkedIn: data used for recommendations + ad targeting (linkedin_tos_006/016)
                 "make recommendations for connections, content, ads, and features",
                 "organize content in your feed",
@@ -377,9 +385,20 @@ CATEGORIES: dict = {
                 "apple uses applebot, a web crawler, to crawl information that is publicly available",
                 "as a source for our foundational ai models",
                 "build ai features",
+                # Google: AI-generated content cannot develop competing ML models (google_tos)
+                "using ai-generated content from our services to develop machine learning models",
+                "ai-generated content from our services to develop machine learning models or related ai technology",
                 # Amazon: prohibition on using AI output to train competing models
                 "use ai-generated content from the amazon services to, directly or indirectly, develop",
                 "develop or improve large language or multimodal models",
+                # Microsoft: broad content license to use/transmit/display content (ms_002 HIGH)
+                "to make copies of, retain, transmit, reformat, display, and distribute via communication tools",
+                "distribute via communication tools your content on the services",
+                "your content may appear in demonstrations or materials that promote the service",
+                # Microsoft: AI services data cannot be used to train any AI (microsoft_tos)
+                "data from the ai services, to create, train, or improve",
+                "create, train, or improve directly or indirectly any ai technology",
+                "you may not use the ai services, or data from the ai services, to create",
                 # Human annotation: missed personalisation language (meta_004, meta_010)
                 "provide a personalized experience",
                 "provide personalized experience",
@@ -471,6 +490,13 @@ CATEGORIES: dict = {
                 "business partners may",
                 "link your account to a third-party",
                 "third-party developers to build certain features",
+                # Microsoft: third-party apps may store your content/data (ms_011 HIGH)
+                "the third-party apps and services may allow or require you to store your content or data with the publisher",
+                "allow or require you to store your content or data with the publisher",
+                # Microsoft: work/school account employer can access comms/files (microsoft_tos)
+                "owner of the domain associated with your email address may",
+                "control and administer your account, and access and process your data, including the contents of your communications and files",
+                "access and process your data, including the contents of your communications",
                 # Amazon: other businesses operating through their platform
                 "parties other than amazon operate stores, provide services",
                 "purchasing directly from those third parties, not from amazon",
@@ -705,6 +731,13 @@ CATEGORIES: dict = {
                 "30-day notice period before arbitration",
                 # Spotify ToS: time bar on claims
                 "any claim arising under these terms must be commenced within one year",
+                # Microsoft: one-year claim filing limit (microsoft_tos)
+                "any claim related to these terms or the services must be filed in court or arbitration within one year",
+                "must be filed in court or arbitration within one year",
+                # Microsoft: permanent bar on claims after one year (ms_017 HIGH)
+                "if not filed within that time, then it",
+                "permanently barred",
+                "if not filed within that time, then it's permanently barred",
                 "no right to any remedy for any claim not asserted within that time period",
                 "within one year after the date the party asserting the claim",
                 "must be commenced by filing a demand for arbitration within one year",
@@ -719,6 +752,9 @@ CATEGORIES: dict = {
                 "governing dispute resolution",
                 # LinkedIn: exclusive jurisdiction clause = arbitration/MEDIUM
                 "all claims and disputes can be litigated only in the federal or state courts",
+                # Google: California/Santa Clara exclusive forum selection (google_010 MEDIUM)
+                "resolved exclusively in the federal or state courts of santa clara county",
+                "california law will govern all disputes arising out of or relating to these terms",
                 "you and linkedin each agree to personal jurisdiction in those courts",
                 # Spotify ToS: asymmetric assignment rights
                 "you may not assign these terms",
@@ -744,6 +780,12 @@ CATEGORIES: dict = {
                 "indirect, special, incidental, punitive",
                 "aggregate liability for all claims",
                 "aggregate liability for all claims relating to",
+                # Google: liability capped at $500 or 125% of fees (google_tos)
+                "google's total liability arising out of or relating to these terms is limited to the greater of",
+                "limited to the greater of us$500 or 125% of the fees",
+                "125% of the fees that you paid to use the relevant services in the 12 months before the breach",
+                "google's total liability arising out of or relating to these terms is limited to the greater of",
+                "125% of the fees that you paid to use the relevant services",
                 # Apple: limits survive even remedy failure (apple_tos_009)
                 "the foregoing limitations will apply even if the above stated remedy fails",
                 "even if the above stated remedy fails of its essential purpose",
@@ -751,6 +793,10 @@ CATEGORIES: dict = {
                 "will not be liable to you in connection with this contract for any amount that exceeds",
                 "not be liable to you in connection with this contract for any amount that exceeds",
                 "us $1000",
+                # Microsoft: $10 liability cap for free services (microsoft_tos)
+                "up to usd$10.00 if the services are free",
+                "usd$10.00 if the services are free",
+                "up to an amount equal to your services fee for the month during which the loss or breach occurred",
                 "$1000",
                 "disclaim all liability",
                 "no warranty of any kind",
@@ -844,9 +890,15 @@ CATEGORIES: dict = {
             ],
             "LOW": [
                 "liability limited to fees paid",
+                # Google: business users must indemnify Google (google_tos)
+                "you'll indemnify google and its directors, officers, employees, and contractors",
+                "for any third-party legal proceedings arising out of or relating to your unlawful use of the services",
                 # Spotify ToS: sole remedy = stop using the service (spotify_tos_009)
                 "your sole and exclusive remedy for any problems or dissatisfaction",
                 "sole and exclusive remedy",
+                # Google: narrows commitments, tells users not to rely for professional advice (google_019)
+                "the only commitments we make about our services are provided in the warranty section",
+                "don't rely on the services for medical, legal, financial, or other professional advice",
                 "is to uninstall any spotify software and to stop using",
                 "to the extent permitted by law",
                 "some jurisdictions do not allow",
@@ -905,9 +957,20 @@ CATEGORIES: dict = {
                 # not a content license. Kept in tracking_profiling MEDIUM instead.
                 "development and training of algorithmic",
                 "build ai features",
+                # Google: AI-generated content cannot develop competing ML models (google_tos)
+                "using ai-generated content from our services to develop machine learning models",
+                "ai-generated content from our services to develop machine learning models or related ai technology",
                 # Amazon: prohibition on using AI output to train competing models
                 "use ai-generated content from the amazon services to, directly or indirectly, develop",
                 "develop or improve large language or multimodal models",
+                # Microsoft: broad content license to use/transmit/display content (ms_002 HIGH)
+                "to make copies of, retain, transmit, reformat, display, and distribute via communication tools",
+                "distribute via communication tools your content on the services",
+                "your content may appear in demonstrations or materials that promote the service",
+                # Microsoft: AI services data cannot be used to train any AI (microsoft_tos)
+                "data from the ai services, to create, train, or improve",
+                "create, train, or improve directly or indirectly any ai technology",
+                "you may not use the ai services, or data from the ai services, to create",
                 "improve our personalised recommendation algorithms",
                 # Apple: Applebot web crawler as AI training source
                 "apple uses applebot, a web crawler, to crawl information that is publicly available",
@@ -941,6 +1004,9 @@ CATEGORIES: dict = {
                 "royalty-free license",
                 # Spotify ToS: feedback used without restriction or payment (spotify_tos_005)
                 "feedback is not confidential and may be used by spotify without restriction and without payment",
+                # Microsoft: feedback used commercially, create derivatives, no obligation (ms_003)
+                "right to make, have made, create derivative works, use, share and commercialize your feedback in any way",
+                "commercialize your feedback in any way and for any purpose",
                 "may be used without restriction and without payment",
                 "used without restriction and without payment to you",
                 "right to use, reproduce",
