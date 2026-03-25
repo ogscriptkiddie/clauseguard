@@ -3,7 +3,7 @@
  * Plain-English risk summaries with optional clause detail toggle.
  */
 
-const API_URL = "http://localhost:5000/analyze";
+const API_URL = 'https://clauseguard-production-183f.up.railway.app';
 
 const PLAIN_ENGLISH = {
   content_rights: {
