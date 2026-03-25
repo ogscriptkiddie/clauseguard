@@ -3,364 +3,1446 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ClauseGuard — Privacy Risk Analyzer</title>
+<title>ClauseGuard — Legal Risk Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
-:root{--bg:#060c1a;--bg2:#0d1528;--bg3:#111e35;--blue:#00bfff;--blue2:#0077cc;--red:#ff3355;--amber:#ffaa00;--green:#00e87a;--text:#e8edf5;--muted:#5a7090;--border:#1a2d4a;--card:#0d1a2e}
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,191,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,191,255,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
-body::after{content:'';position:fixed;top:-200px;left:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(0,119,204,.12) 0%,transparent 70%);pointer-events:none;z-index:0}
-.glow-orb-right{position:fixed;bottom:-200px;right:-200px;width:700px;height:700px;background:radial-gradient(circle,rgba(0,191,255,.07) 0%,transparent 70%);pointer-events:none;z-index:0}
-header{position:relative;z-index:10;border-bottom:1px solid var(--border);background:rgba(6,12,26,.9);backdrop-filter:blur(12px);padding:0 40px;display:flex;align-items:center;justify-content:space-between;height:64px}
-.logo{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;letter-spacing:-.5px;color:var(--text)}
-.logo-shield{width:32px;height:32px;background:linear-gradient(135deg,var(--blue2),var(--blue));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 0 20px rgba(0,191,255,.3)}
-.logo span{color:var(--blue)}
-.header-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace}
-.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse-dot 2s infinite}
-@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
-.hero{position:relative;z-index:5;text-align:center;padding:72px 24px 48px}
-.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,191,255,.08);border:1px solid rgba(0,191,255,.2);border-radius:100px;padding:5px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);letter-spacing:.5px;margin-bottom:28px;text-transform:uppercase}
-h1{font-family:'JetBrains Mono',monospace;font-size:clamp(32px,5vw,58px);font-weight:700;line-height:1.1;letter-spacing:-1.5px;margin-bottom:16px}
-h1 .accent{color:var(--blue)} h1 .danger{color:var(--red)}
-.hero-sub{font-size:16px;color:var(--muted);max-width:540px;margin:0 auto 48px;line-height:1.65;font-weight:300}
-.analyzer{position:relative;z-index:5;max-width:860px;margin:0 auto;padding:0 24px 80px}
-.input-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 0 1px rgba(0,191,255,.05)}
-.input-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2)}
-.tab-btn{padding:12px 20px;font-size:13px;font-family:'JetBrains Mono',monospace;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
-.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);background:rgba(0,191,255,.04)}
-.tab-panel{display:none;padding:20px}
-.tab-panel.active{display:block}
-/* URL tab */
-.url-row{display:flex;gap:10px;align-items:center}
-.url-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;transition:border-color .2s}
-.url-input:focus{border-color:var(--blue2)}
-.url-input::placeholder{color:var(--muted)}
-.fetch-btn{padding:14px 20px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:13px;cursor:pointer;white-space:nowrap;transition:all .15s}
-.fetch-btn:hover{background:rgba(0,191,255,.08);border-color:rgba(0,191,255,.3)}
-.fetch-btn:disabled{opacity:.4;cursor:not-allowed}
-.url-quick{margin-top:14px}
-.url-quick-label{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:8px}
-.url-chips{display:flex;flex-wrap:wrap;gap:7px}
-.url-chip{padding:5px 12px;background:rgba(0,191,255,.06);border:1px solid rgba(0,191,255,.15);border-radius:100px;font-size:12px;color:var(--blue);cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
-.url-chip:hover{background:rgba(0,191,255,.12);border-color:rgba(0,191,255,.35)}
-.fetch-status{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:12px;min-height:18px}
-.fetch-status.loading{color:var(--blue)}
-.fetch-status.success{color:var(--green)}
-.fetch-status.error{color:var(--red)}
-/* Paste tab */
-textarea{width:100%;height:180px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none;transition:border-color .2s}
-textarea:focus{border-color:var(--blue2)}
-textarea::placeholder{color:var(--muted)}
-.sample-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.sample-chip{padding:5px 12px;background:rgba(0,191,255,.06);border:1px solid rgba(0,191,255,.15);border-radius:100px;font-size:12px;color:var(--blue);cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
-.sample-chip:hover{background:rgba(0,191,255,.12);border-color:rgba(0,191,255,.35)}
-.input-footer{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);background:var(--bg2)}
-.char-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
-.analyze-btn{display:flex;align-items:center;gap:8px;padding:11px 28px;background:linear-gradient(135deg,var(--blue2),var(--blue));border:none;border-radius:8px;color:#fff;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.3px;transition:all .2s;box-shadow:0 0 24px rgba(0,191,255,.2)}
-.analyze-btn:hover{transform:translateY(-1px);box-shadow:0 0 32px rgba(0,191,255,.35)}
-.analyze-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
-.scanning-overlay{display:none;text-align:center;padding:48px 24px}
-.scanning-overlay.active{display:block}
-.scan-ring{width:80px;height:80px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;margin:0 auto 20px;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.scan-text{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--blue);letter-spacing:1px;text-transform:uppercase}
-.scan-log{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);height:16px}
-#results{display:none;margin-top:32px}
-#results.active{display:block}
-.score-header{display:grid;grid-template-columns:200px 1fr;gap:24px;margin-bottom:24px}
-@media(max-width:600px){.score-header{grid-template-columns:1fr}}
-.score-circle-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.score-label{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px}
-.score-number{font-family:'JetBrains Mono',monospace;font-size:64px;font-weight:700;line-height:1;margin-bottom:4px;transition:color .4s}
-.score-number.high{color:var(--red);text-shadow:0 0 30px rgba(255,51,85,.4)}
-.score-number.medium{color:var(--amber);text-shadow:0 0 30px rgba(255,170,0,.4)}
-.score-number.low{color:var(--green);text-shadow:0 0 30px rgba(0,232,122,.4)}
-.score-level{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;padding:3px 10px;border-radius:100px;margin-top:6px}
-.score-level.high{background:rgba(255,51,85,.12);color:var(--red);border:1px solid rgba(255,51,85,.25)}
-.score-level.medium{background:rgba(255,170,0,.12);color:var(--amber);border:1px solid rgba(255,170,0,.25)}
-.score-level.low{background:rgba(0,232,122,.12);color:var(--green);border:1px solid rgba(0,232,122,.25)}
-.summary-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px}
-.summary-title{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:12px}
-.summary-text{font-size:14px;line-height:1.7;color:var(--text);margin-bottom:20px}
-.stats-row{display:flex;gap:20px;flex-wrap:wrap}
-.stat{display:flex;flex-direction:column;gap:2px}
-.stat-num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--blue)}
-.stat-lbl{font-size:11px;color:var(--muted)}
-.categories-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:24px}
-.cat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;opacity:0;transform:translateY(12px);animation:fadeUp .3s forwards}
-@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
-.cat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.cat-name{font-size:12px;color:var(--text);font-weight:500}
-.cat-count{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
-.cat-bar-bg{height:5px;background:var(--bg3);border-radius:100px;overflow:hidden}
-.cat-bar-fill{height:100%;border-radius:100px;width:0;transition:width .8s cubic-bezier(.4,0,.2,1)}
-.cat-bar-fill.high{background:linear-gradient(90deg,var(--red),#ff6680)}
-.cat-bar-fill.medium{background:linear-gradient(90deg,var(--amber),#ffc84d)}
-.cat-bar-fill.low{background:linear-gradient(90deg,var(--green),#66ffaa)}
-.cat-bar-fill.none{background:var(--bg3)}
-.cat-risk{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.5px}
-.cat-risk.HIGH{color:var(--red)} .cat-risk.MEDIUM{color:var(--amber)} .cat-risk.LOW{color:var(--green)} .cat-risk.NONE{color:var(--muted)}
-.section-heading{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.section-heading::after{content:'';flex:1;height:1px;background:var(--border)}
-.clauses-list{display:flex;flex-direction:column;gap:10px}
-.clause-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;opacity:0;transform:translateY(8px);animation:fadeUp .3s forwards;transition:border-color .2s}
-.clause-card:hover{border-color:rgba(0,191,255,.2)}
-.clause-card.HIGH{border-left:3px solid var(--red)}
-.clause-card.MEDIUM{border-left:3px solid var(--amber)}
-.clause-card.LOW{border-left:3px solid var(--green)}
-.clause-header{display:flex;align-items:flex-start;justify-content:space-between;padding:16px 16px 14px;gap:12px}
-.clause-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.risk-badge{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;letter-spacing:.5px;flex-shrink:0}
-.risk-badge.HIGH{background:rgba(255,51,85,.15);color:var(--red);border:1px solid rgba(255,51,85,.3)}
-.risk-badge.MEDIUM{background:rgba(255,170,0,.15);color:var(--amber);border:1px solid rgba(255,170,0,.3)}
-.risk-badge.LOW{background:rgba(0,232,122,.12);color:var(--green);border:1px solid rgba(0,232,122,.25)}
-.cat-tag{font-size:11px;color:var(--muted);background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:4px}
-.clause-text-plain{font-size:13.5px;line-height:1.65;color:var(--text);flex:1}
-.toggle-btn{flex-shrink:0;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--blue);background:none;border:1px solid rgba(0,191,255,.2);border-radius:6px;padding:4px 10px;cursor:pointer;transition:all .15s;white-space:nowrap}
-.toggle-btn:hover{background:rgba(0,191,255,.06)}
-.clause-raw{display:none;margin:0 16px 16px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:var(--muted)}
-.clause-raw.open{display:block}
-.keywords-row{padding:0 16px 14px;display:flex;flex-wrap:wrap;gap:5px}
-.kw{font-family:'JetBrains Mono',monospace;font-size:10px;background:rgba(0,191,255,.06);border:1px solid rgba(0,191,255,.12);color:var(--blue);padding:2px 7px;border-radius:4px}
-.error-card{background:rgba(255,51,85,.06);border:1px solid rgba(255,51,85,.2);border-radius:12px;padding:20px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--red);margin-top:20px;display:none}
-.error-card.active{display:block}
-footer{position:relative;z-index:5;border-top:1px solid var(--border);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace}
-footer a{color:var(--blue);text-decoration:none}
-footer a:hover{text-decoration:underline}
+/* ─── DESIGN TOKENS ────────────────────────────────────────── */
+:root {
+  --bg:       #F7F4EE;
+  --bg2:      #EDE9E1;
+  --dark:     #080B14;
+  --dark2:    #0F1422;
+  --dark3:    #161B2E;
+  --text:     #0A0A08;
+  --muted:    #7A7060;
+  --line:     #D8D3C8;
+  --red:      #E8322C;
+  --amber:    #E8890A;
+  --green:    #1A9E52;
+  --blue:     #1A52E8;
+  --gold:     #C8901A;
+  --cream:    #F7F4EE;
+  --r-h-bg:   rgba(232,50,44,.08);
+  --r-m-bg:   rgba(232,137,10,.08);
+  --r-l-bg:   rgba(26,158,82,.08);
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ─── CUSTOM CURSOR ─────────────────────────────────────────── */
+#cursor {
+  position: fixed;
+  width: 8px; height: 8px;
+  background: var(--text);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%,-50%);
+  transition: transform .1s ease, width .2s ease, height .2s ease, background .2s ease;
+}
+#cursor-ring {
+  position: fixed;
+  width: 36px; height: 36px;
+  border: 1px solid rgba(10,10,8,.25);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  transform: translate(-50%,-50%);
+  transition: transform .12s ease, width .25s ease, height .25s ease, border-color .2s ease;
+}
+body:has(button:hover) #cursor { width:14px; height:14px; background:var(--red); }
+body:has(button:hover) #cursor-ring { width:52px; height:52px; border-color:rgba(232,50,44,.4); }
+
+/* ─── NAVIGATION ─────────────────────────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 1000;
+  padding: 0 48px;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(247,244,238,.85);
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-bottom: 1px solid transparent;
+  transition: border-color .3s;
+}
+nav.scrolled { border-bottom-color: var(--line); }
+
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--text);
+}
+
+/* SVG logo shield */
+.logo-svg { width: 32px; height: 36px; flex-shrink: 0; }
+
+.nav-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 700;
+  letter-spacing: -.3px;
+}
+.nav-name span { color: var(--red); }
+
+.nav-status {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--muted); letter-spacing: 1px;
+}
+.dot-live {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 0 0 rgba(26,158,82,.5);
+  animation: ripple 2s infinite;
+}
+@keyframes ripple {
+  0%   { box-shadow: 0 0 0 0 rgba(26,158,82,.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(26,158,82,0); }
+  100% { box-shadow: 0 0 0 0 rgba(26,158,82,0); }
+}
+
+/* ─── HERO ──────────────────────────────────────────────────── */
+.hero {
+  min-height: 100vh;
+  display: grid; grid-template-columns: 1fr 1fr;
+  align-items: center;
+  padding: 80px 48px 48px;
+  gap: 48px;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .hero { grid-template-columns: 1fr; padding: 100px 24px 48px; }
+  .hero-visual { height: 300px; order: -1; }
+}
+
+.hero-content { position: relative; z-index: 2; }
+
+.hero-kicker {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 28px;
+}
+.hero-kicker::before {
+  content: '';
+  display: block; width: 24px; height: 1px;
+  background: var(--muted);
+}
+
+h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(44px, 5.5vw, 72px);
+  font-weight: 800;
+  line-height: 1.0;
+  letter-spacing: -2px;
+  color: var(--text);
+  margin-bottom: 24px;
+}
+
+h1 .word-red { color: var(--red); font-style: italic; }
+h1 .word-outline {
+  -webkit-text-stroke: 2px var(--text);
+  color: transparent;
+  font-weight: 800;
+}
+
+.hero-body {
+  font-family: 'Instrument Serif', serif;
+  font-size: 18px; font-style: italic;
+  color: var(--muted); line-height: 1.7;
+  max-width: 400px;
+  margin-bottom: 40px;
+}
+
+.hero-cta-row {
+  display: flex; align-items: center; gap: 20px;
+}
+
+.cta-main {
+  padding: 14px 32px;
+  background: var(--text);
+  color: var(--cream);
+  font-family: 'Syne', sans-serif;
+  font-size: 13px; font-weight: 600;
+  letter-spacing: .5px;
+  border: none; cursor: pointer;
+  transition: transform .15s, background .2s;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+.cta-main:hover { background: var(--red); transform: translateY(-2px); }
+
+.cta-sub {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; color: var(--muted); letter-spacing: .5px;
+}
+
+/* ─── THREE.JS CANVAS ───────────────────────────────────────── */
+.hero-visual {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+
+#three-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+
+.crystal-label {
+  position: absolute; bottom: 24px; right: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); writing-mode: vertical-rl;
+  opacity: .5;
+}
+
+/* ─── SCROLL REVEAL ─────────────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity .7s cubic-bezier(.4,0,.2,1), transform .7s cubic-bezier(.4,0,.2,1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: .1s; }
+.reveal-delay-2 { transition-delay: .2s; }
+.reveal-delay-3 { transition-delay: .3s; }
+.reveal-delay-4 { transition-delay: .4s; }
+
+/* ─── STATS STRIP ───────────────────────────────────────────── */
+.stats-strip {
+  background: var(--dark);
+  padding: 0 48px;
+  display: flex; align-items: stretch;
+  border-top: 1px solid rgba(255,255,255,.04);
+  overflow-x: auto;
+}
+
+.stat-item {
+  flex: 1; min-width: 140px;
+  padding: 32px 0;
+  display: flex; flex-direction: column; gap: 6px;
+  border-right: 1px solid rgba(255,255,255,.06);
+  padding-right: 40px; padding-left: 40px;
+}
+.stat-item:first-child { padding-left: 0; }
+.stat-item:last-child { border-right: none; }
+
+.stat-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 40px; font-weight: 800;
+  color: #fff; line-height: 1;
+  letter-spacing: -1.5px;
+}
+.stat-num span { color: var(--gold); }
+
+.stat-lbl {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: rgba(255,255,255,.35);
+}
+
+/* ─── SECTION SHARED ────────────────────────────────────────── */
+section {
+  padding: 100px 48px;
+}
+@media (max-width: 600px) { section, nav, .hero { padding-left: 20px; padding-right: 20px; } }
+
+.section-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 48px;
+  display: flex; align-items: center; gap: 12px;
+}
+.section-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--line); max-width: 80px; }
+
+/* ─── ANALYZER SECTION ──────────────────────────────────────── */
+#analyzer {
+  background: var(--dark);
+  padding: 100px 48px;
+}
+
+/* Tab switcher */
+.tabs {
+  display: inline-flex;
+  border: 1px solid rgba(255,255,255,.1);
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 32px;
+}
+
+.tab-btn {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: .5px;
+  padding: 9px 24px;
+  background: none; border: none;
+  color: rgba(255,255,255,.4); cursor: pointer;
+  transition: all .2s;
+}
+.tab-btn.active {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+
+/* URL row */
+.url-wrapper {
+  display: flex; gap: 0;
+  border: 1px solid rgba(255,255,255,.12);
+  margin-bottom: 16px;
+  transition: border-color .2s;
+}
+.url-wrapper:focus-within { border-color: rgba(255,255,255,.35); }
+
+.url-in {
+  flex: 1; background: none; border: none;
+  padding: 16px 20px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px; color: #fff; outline: none;
+}
+.url-in::placeholder { color: rgba(255,255,255,.25); }
+
+.url-submit {
+  background: var(--red); border: none;
+  padding: 0 28px;
+  font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: #fff; cursor: pointer;
+  transition: background .15s, opacity .2s;
+}
+.url-submit:hover { background: #C8221C; }
+.url-submit:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Quick links */
+.quick-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  align-items: center; margin-bottom: 16px;
+}
+.ql {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; color: rgba(255,255,255,.35);
+  background: none; border: 1px solid rgba(255,255,255,.08);
+  padding: 5px 14px; cursor: pointer;
+  transition: all .15s; letter-spacing: .3px;
+}
+.ql:hover { color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.2); }
+.ql-sep { color: rgba(255,255,255,.2); font-size: 9px; letter-spacing: 2px; font-family: 'IBM Plex Mono',monospace; }
+
+.fetch-msg {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; min-height: 20px;
+  margin-bottom: 8px; letter-spacing: .3px;
+}
+.fetch-msg.ok   { color: var(--green); }
+.fetch-msg.err  { color: var(--red); }
+.fetch-msg.wait { color: rgba(255,255,255,.5); }
+
+/* Paste area */
+.paste-ta {
+  width: 100%; height: 200px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.1);
+  padding: 20px; color: #fff;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px; line-height: 1.7;
+  resize: vertical; outline: none;
+  transition: border-color .2s;
+}
+.paste-ta:focus { border-color: rgba(255,255,255,.3); }
+.paste-ta::placeholder { color: rgba(255,255,255,.2); }
+
+.sample-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 14px;
+}
+
+.actions-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 24px; padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+
+.char-ct {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: rgba(255,255,255,.3);
+}
+
+.run-analysis {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 14px 40px;
+  background: var(--cream); color: var(--dark);
+  border: none; cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  transition: background .15s, transform .1s;
+}
+.run-analysis:hover { background: #fff; transform: translateY(-2px); }
+.run-analysis:disabled { opacity: .3; cursor: not-allowed; transform: none; }
+
+/* ─── SCANNING ──────────────────────────────────────────────── */
+#scan-overlay {
+  display: none; padding: 80px 0; text-align: center;
+}
+#scan-overlay.on { display: block; }
+
+.scan-ring-wrap {
+  position: relative;
+  width: 80px; height: 80px;
+  margin: 0 auto 24px;
+}
+.scan-ring-svg {
+  animation: spin-ring 1.2s linear infinite;
+  width: 80px; height: 80px;
+}
+@keyframes spin-ring { to { transform: rotate(360deg); } }
+
+.scan-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 600; color: rgba(255,255,255,.7);
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.scan-sub {
+  margin-top: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: rgba(255,255,255,.3);
+  min-height: 16px; letter-spacing: .5px;
+}
+
+/* ─── ERROR ─────────────────────────────────────────────────── */
+.err-block {
+  display: none; margin-top: 20px;
+  padding: 16px 20px;
+  background: rgba(232,50,44,.07);
+  border-left: 2px solid var(--red);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; color: rgba(232,50,44,.9);
+  line-height: 1.6;
+}
+.err-block.on { display: block; }
+
+/* ─── RESULTS ───────────────────────────────────────────────── */
+#results { display: none; margin-top: 60px; }
+#results.on { display: block; }
+
+/* 3D Score card */
+.score-stage {
+  perspective: 800px;
+  display: flex; gap: 32px;
+  align-items: stretch;
+  margin-bottom: 60px;
+  flex-wrap: wrap;
+}
+
+.score-card-3d {
+  flex: 0 0 220px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: var(--dark2);
+  padding: 40px 28px;
+  text-align: center;
+  transform-style: preserve-3d;
+  transition: transform .4s cubic-bezier(.4,0,.2,1);
+  position: relative;
+  overflow: hidden;
+}
+
+.score-card-3d::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: conic-gradient(var(--score-color, #fff) calc(var(--score-pct, 0) * 1%), transparent 0);
+  opacity: .07;
+  transition: --score-pct .8s;
+}
+
+.score-card-3d:hover { transform: rotateY(-8deg) rotateX(4deg); }
+
+.score-ring {
+  position: relative;
+  width: 100px; height: 100px;
+  margin: 0 auto 16px;
+}
+
+.score-ring svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring-bg { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 3; }
+
+.ring-fill {
+  fill: none; stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 282;
+  stroke-dashoffset: 282;
+  transition: stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1), stroke .5s;
+}
+
+.score-val {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-size: 32px; font-weight: 800;
+  letter-spacing: -1px; color: #fff;
+}
+
+.score-level-badge {
+  display: inline-block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase;
+  padding: 4px 12px; border: 1px solid;
+  margin-top: 4px;
+}
+.score-level-badge.H { color: var(--red);   border-color: var(--red);   background: var(--r-h-bg); }
+.score-level-badge.M { color: var(--amber); border-color: var(--amber); background: var(--r-m-bg); }
+.score-level-badge.L { color: var(--green); border-color: var(--green); background: var(--r-l-bg); }
+
+.score-summary-panel {
+  flex: 1; min-width: 260px;
+  border: 1px solid rgba(255,255,255,.07);
+  background: rgba(255,255,255,.02);
+  padding: 32px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+.summary-headline {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px; font-weight: 700;
+  color: #fff; line-height: 1.2; letter-spacing: -.5px;
+}
+
+.summary-body {
+  font-family: 'Instrument Serif', serif;
+  font-size: 15px; font-style: italic;
+  color: rgba(255,255,255,.5); line-height: 1.75;
+}
+
+.meta-trio {
+  display: flex; gap: 32px; padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,.06);
+  flex-wrap: wrap;
+}
+
+.meta-piece { display: flex; flex-direction: column; gap: 4px; }
+.meta-n {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px; font-weight: 800;
+  color: rgba(255,255,255,.9); letter-spacing: -1px;
+}
+.meta-l {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: rgba(255,255,255,.3);
+}
+
+/* Category grid */
+.cat-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+  color: rgba(255,255,255,.3); margin-bottom: 16px;
+}
+
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 48px;
+}
+
+.cat-tile {
+  background: var(--dark2);
+  border: 1px solid rgba(255,255,255,.06);
+  padding: 20px 18px;
+  transform: translateY(20px); opacity: 0;
+  animation: tileIn .4s forwards;
+  transition: transform .2s, border-color .2s;
+  transform-style: preserve-3d;
+  perspective: 400px;
+}
+
+@keyframes tileIn {
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.cat-tile:hover {
+  transform: translateY(-3px) rotateX(3deg);
+  border-color: rgba(255,255,255,.15);
+}
+
+.ct-count {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px; font-weight: 800;
+  color: rgba(255,255,255,.2);
+  float: right; line-height: 1;
+  margin-top: -2px;
+}
+
+.ct-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: .5px; text-transform: uppercase;
+  color: rgba(255,255,255,.4); margin-bottom: 14px;
+  padding-right: 30px; line-height: 1.4;
+  clear: both;
+}
+
+.ct-track { height: 2px; background: rgba(255,255,255,.06); margin-bottom: 10px; overflow: hidden; }
+
+.ct-bar {
+  height: 100%; width: 0;
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+.ct-bar.H { background: var(--red); }
+.ct-bar.M { background: var(--amber); }
+.ct-bar.L { background: var(--green); }
+.ct-bar.N { background: rgba(255,255,255,.1); }
+
+.ct-risk {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+}
+.ct-risk.H { color: var(--red); }
+.ct-risk.M { color: var(--amber); }
+.ct-risk.L { color: var(--green); }
+.ct-risk.N { color: rgba(255,255,255,.2); }
+
+/* Clause cards */
+.clauses-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+  color: rgba(255,255,255,.3); margin-bottom: 16px;
+}
+
+.clause-stack { display: flex; flex-direction: column; gap: 8px; }
+
+.clause-card {
+  background: var(--dark2);
+  border: 1px solid rgba(255,255,255,.06);
+  border-left: 2px solid;
+  opacity: 0; transform: translateX(-16px);
+  animation: cardIn .35s forwards;
+  transition: border-color .2s, transform .2s;
+  perspective: 600px; transform-style: preserve-3d;
+}
+.clause-card:hover { transform: translateX(0) translateZ(4px); }
+
+@keyframes cardIn { to { opacity: 1; transform: translateX(0); } }
+
+.clause-card.H { border-left-color: var(--red); }
+.clause-card.M { border-left-color: var(--amber); }
+.clause-card.L { border-left-color: var(--green); }
+
+.cc-head {
+  display: flex; align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 20px 16px; gap: 16px;
+  cursor: pointer;
+}
+
+.cc-left { flex: 1; }
+
+.cc-tags {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; margin-bottom: 10px;
+}
+
+.badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 3px 8px; border: 1px solid;
+}
+.badge.H { color: var(--red);   border-color: var(--red);   background: var(--r-h-bg); }
+.badge.M { color: var(--amber); border-color: var(--amber); background: var(--r-m-bg); }
+.badge.L { color: var(--green); border-color: var(--green); background: var(--r-l-bg); }
+
+.badge-cat {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; color: rgba(255,255,255,.3);
+}
+
+.badge-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; color: rgba(255,255,255,.15);
+}
+
+.cc-excerpt {
+  font-family: 'Instrument Serif', serif;
+  font-size: 14.5px; color: rgba(255,255,255,.75);
+  line-height: 1.65; font-style: italic;
+}
+
+.cc-toggle {
+  flex-shrink: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 1px;
+  text-transform: uppercase; color: rgba(255,255,255,.25);
+  background: none;
+  border: 1px solid rgba(255,255,255,.08);
+  padding: 4px 12px; cursor: pointer;
+  transition: all .15s; align-self: flex-start;
+  margin-top: 2px;
+}
+.cc-toggle:hover { color: rgba(255,255,255,.6); border-color: rgba(255,255,255,.2); }
+
+.cc-kws {
+  padding: 0 20px 14px;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+
+.kw-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; color: rgba(255,200,100,.6);
+  background: rgba(255,200,100,.06);
+  border: 1px solid rgba(255,200,100,.12);
+  padding: 2px 8px;
+}
+
+.cc-raw {
+  display: none;
+  margin: 0 20px 20px; padding: 16px;
+  background: rgba(0,0,0,.3);
+  border-left: 1px solid rgba(255,255,255,.06);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px; color: rgba(255,255,255,.4);
+  line-height: 1.75;
+}
+.cc-raw.open { display: block; }
+
+/* ─── ABOUT STRIP ───────────────────────────────────────────── */
+.about-strip {
+  background: var(--bg2);
+  padding: 80px 48px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 80px;
+  align-items: center;
+}
+@media (max-width: 700px) { .about-strip { grid-template-columns: 1fr; gap: 40px; } }
+
+.about-heading {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(28px, 3.5vw, 44px);
+  font-weight: 800; letter-spacing: -1.5px;
+  line-height: 1.1; color: var(--text);
+}
+.about-heading em { font-style: italic; color: var(--red); }
+
+.about-body {
+  font-family: 'Instrument Serif', serif;
+  font-size: 16px; font-style: italic;
+  color: var(--muted); line-height: 1.8;
+}
+
+.risk-list { display: flex; flex-direction: column; gap: 0; }
+
+.risk-row {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  font-family: 'Syne', sans-serif;
+  font-size: 13px; font-weight: 500;
+  color: var(--text);
+  transform: translateX(-20px); opacity: 0;
+  transition: transform .5s, opacity .5s;
+}
+.risk-row.visible { transform: translateX(0); opacity: 1; }
+
+.risk-row-weight {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; color: var(--muted);
+}
+
+/* ─── FOOTER ────────────────────────────────────────────────── */
+footer {
+  background: var(--dark);
+  padding: 32px 48px;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255,255,255,.04);
+  flex-wrap: wrap; gap: 16px;
+}
+
+.footer-logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 700;
+  color: rgba(255,255,255,.4);
+}
+
+.footer-links {
+  display: flex; gap: 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: 1px;
+}
+.footer-links a {
+  color: rgba(255,255,255,.3); text-decoration: none;
+  transition: color .2s;
+}
+.footer-links a:hover { color: rgba(255,255,255,.7); }
 </style>
 </head>
 <body>
-<div class="glow-orb-right"></div>
-<header>
-  <div class="logo"><div class="logo-shield">🛡</div>Clause<span>Guard</span></div>
-  <div class="header-meta"><div class="status-dot"></div>API LIVE · clauseguard-production-183f.up.railway.app</div>
-</header>
-<div class="hero">
-  <div class="hero-badge">🔬 Live Risk Analysis Engine</div>
-  <h1>The ToS you <span class="danger">agreed to</span><br/>without <span class="accent">reading</span></h1>
-  <p class="hero-sub">Enter a URL or paste text from any Terms of Service or Privacy Policy. ClauseGuard classifies each clause across 7 risk categories and returns a weighted risk score — in seconds.</p>
+
+<!-- Custom cursor -->
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a class="nav-logo" href="#">
+    <svg class="logo-svg" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 1L30 8.5V22C30 29.5 16 35 16 35C16 35 2 29.5 2 22V8.5L16 1Z" fill="#0A0A08" stroke="#E8322C" stroke-width="1.2"/>
+      <path d="M16 5L27 11V21C27 26.5 16 32 16 32C16 32 5 26.5 5 21V11L16 5Z" fill="none" stroke="#E8322C" stroke-width=".3" stroke-opacity=".3"/>
+      <path d="M19.5 13C17.8 11.9 15.2 12.2 13.7 13.9C12.2 15.6 12.2 18.4 13.7 20.1C15.2 21.8 17.8 22.1 19.5 21" stroke="#E8322C" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="19.5" y1="17.5" x2="16" y2="17.5" stroke="#E8322C" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="16" cy="27" r="1.2" fill="#E8322C" opacity=".5"/>
+    </svg>
+    <span class="nav-name">Clause<span>Guard</span></span>
+  </a>
+  <div class="nav-status">
+    <div class="dot-live"></div>
+    Live · SFU Capstone 2026
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero-section">
+  <div class="hero-content">
+    <div class="hero-kicker reveal">Legal Risk Intelligence</div>
+    <h1 class="reveal reveal-delay-1">
+      Read the<br/>
+      <span class="word-red">fine print</span><br/>
+      <span class="word-outline">for you.</span>
+    </h1>
+    <p class="hero-body reveal reveal-delay-2">
+      Every ToS agreement hides clauses that sell your data, waive your rights, and lock you into binding arbitration. ClauseGuard surfaces them before you click "I Agree."
+    </p>
+    <div class="hero-cta-row reveal reveal-delay-3">
+      <button class="cta-main" onclick="scrollToAnalyzer()">Analyze a Document</button>
+      <span class="cta-sub">No install required</span>
+    </div>
+  </div>
+
+  <div class="hero-visual">
+    <canvas id="three-canvas"></canvas>
+    <span class="crystal-label">Risk Geometry</span>
+  </div>
+</section>
+
+<!-- STATS STRIP -->
+<div class="stats-strip">
+  <div class="stat-item reveal">
+    <div class="stat-num">7<span>57</span></div>
+    <div class="stat-lbl">Classifier Rules</div>
+  </div>
+  <div class="stat-item reveal reveal-delay-1">
+    <div class="stat-num">2<span>14</span></div>
+    <div class="stat-lbl">Labeled Clauses</div>
+  </div>
+  <div class="stat-item reveal reveal-delay-2">
+    <div class="stat-num">1<span>2</span></div>
+    <div class="stat-lbl">Real Documents</div>
+  </div>
+  <div class="stat-item reveal reveal-delay-3">
+    <div class="stat-num">7</div>
+    <div class="stat-lbl">Risk Categories</div>
+  </div>
 </div>
-<div class="analyzer">
-  <div class="input-card">
-    <div class="input-tabs">
-      <button class="tab-btn active" onclick="switchTab('url',this)">🔗 URL</button>
-      <button class="tab-btn" onclick="switchTab('paste',this)">📋 Paste Text</button>
-    </div>
 
-    <!-- URL TAB -->
-    <div id="tab-url" class="tab-panel active">
-      <div class="url-row">
-        <input type="url" class="url-input" id="url-input" placeholder="https://discord.com/privacy"/>
-        <button class="fetch-btn" id="fetch-btn" onclick="fetchAndAnalyze()">⚡ Fetch &amp; Analyze</button>
-      </div>
-      <div class="url-quick">
-        <div class="url-quick-label">Quick links →</div>
-        <div class="url-chips">
-          <span class="url-chip" onclick="setUrl('https://discord.com/privacy')">Discord Privacy</span>
-          <span class="url-chip" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify ToS</span>
-          <span class="url-chip" onclick="setUrl('https://policies.google.com/terms')">Google ToS</span>
-          <span class="url-chip" onclick="setUrl('https://www.reddit.com/policies/privacy-policy')">Reddit Privacy</span>
-          <span class="url-chip" onclick="setUrl('https://twitter.com/en/tos')">Twitter/X ToS</span>
-          <span class="url-chip" onclick="setUrl('https://www.tiktok.com/legal/page/us/privacy-policy/en')">TikTok Privacy</span>
-          <span class="url-chip" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn ToS</span>
-          <span class="url-chip" onclick="setUrl('https://www.microsoft.com/en-ca/servicesagreement')">Microsoft ToS</span>
-        </div>
-      </div>
-      <div class="fetch-status" id="fetch-status"></div>
-    </div>
+<!-- ANALYZER -->
+<section id="analyzer">
+  <div class="section-eyebrow" style="color:rgba(255,255,255,.3)">
+    Document Analysis
+    <span style="flex:1; height:1px; background:rgba(255,255,255,.07); max-width:80px; display:block;"></span>
+  </div>
 
-    <!-- PASTE TAB -->
-    <div id="tab-paste" class="tab-panel">
-      <textarea id="tos-input" placeholder="Paste the full Terms of Service or Privacy Policy text here..."></textarea>
-      <div class="sample-links">
-        <span style="font-size:12px;color:var(--muted);align-self:center;">Samples →</span>
-        <button class="sample-chip" onclick="loadSample('arbitration')">⚖️ Arbitration</button>
-        <button class="sample-chip" onclick="loadSample('data_selling')">📦 Data selling</button>
-        <button class="sample-chip" onclick="loadSample('content_license')">📝 Content license</button>
-        <button class="sample-chip" onclick="loadSample('liability')">🛑 Liability waiver</button>
-        <button class="sample-chip" onclick="loadSample('full')">📄 Full sample ToS</button>
-      </div>
-    </div>
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('url',this)">URL</button>
+    <button class="tab-btn" onclick="switchTab('paste',this)">Paste Text</button>
+  </div>
 
-    <div class="input-footer">
-      <div class="char-count" id="char-count">—</div>
-      <button class="analyze-btn" id="analyze-btn" onclick="analyzeText()"><span>⚡</span> Analyze Document</button>
+  <!-- URL panel -->
+  <div id="panel-url">
+    <div class="url-wrapper">
+      <input type="url" class="url-in" id="url-in" placeholder="https://discord.com/privacy"
+             onkeydown="if(event.key==='Enter')fetchGo()"/>
+      <button class="url-submit" id="url-btn" onclick="fetchGo()">Fetch →</button>
+    </div>
+    <div class="quick-row">
+      <span class="ql-sep">Quick →</span>
+      <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
+      <button class="ql" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify</button>
+      <button class="ql" onclick="setUrl('https://policies.google.com/terms')">Google</button>
+      <button class="ql" onclick="setUrl('https://www.reddit.com/policies/privacy-policy')">Reddit</button>
+      <button class="ql" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn</button>
+      <button class="ql" onclick="setUrl('https://www.microsoft.com/en-ca/servicesagreement')">Microsoft</button>
+    </div>
+    <div class="fetch-msg" id="fetch-msg"></div>
+  </div>
+
+  <!-- Paste panel -->
+  <div id="panel-paste" style="display:none">
+    <textarea class="paste-ta" id="paste-ta"
+      placeholder="Paste the full Terms of Service or Privacy Policy text here…&#10;&#10;Or load a sample using the buttons below."></textarea>
+    <div class="sample-row">
+      <span class="ql-sep">Samples →</span>
+      <button class="ql" onclick="loadSample('arb')">Arbitration</button>
+      <button class="ql" onclick="loadSample('data')">Data Selling</button>
+      <button class="ql" onclick="loadSample('ip')">Content License</button>
+      <button class="ql" onclick="loadSample('liab')">Liability Cap</button>
+      <button class="ql" onclick="loadSample('full')">Full Sample</button>
     </div>
   </div>
 
-  <div class="scanning-overlay" id="scanning">
-    <div class="scan-ring"></div>
-    <div class="scan-text">Scanning document</div>
-    <div class="scan-log" id="scan-log">Segmenting clauses...</div>
+  <div class="actions-bar">
+    <span class="char-ct" id="char-ct">—</span>
+    <button class="run-analysis" id="run-btn" onclick="analyze()">Run Analysis</button>
   </div>
-  <div class="error-card" id="error-card"></div>
 
+  <!-- Scanning -->
+  <div id="scan-overlay">
+    <div class="scan-ring-wrap">
+      <svg class="scan-ring-svg" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+        <circle cx="40" cy="40" r="34" fill="none" stroke="#E8322C" stroke-width="2"
+                stroke-dasharray="50 163" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+      </svg>
+    </div>
+    <div class="scan-title">Analyzing</div>
+    <div class="scan-sub" id="scan-sub-txt"></div>
+  </div>
+
+  <div class="err-block" id="err-block"></div>
+
+  <!-- Results -->
   <div id="results">
-    <div class="score-header">
-      <div class="score-circle-wrap">
-        <div class="score-label">Risk Score</div>
-        <div class="score-number" id="score-num">0</div>
-        <div class="score-level" id="score-level">—</div>
-        <div style="margin-top:12px;font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;">out of 100</div>
+    <div class="score-stage">
+      <div class="score-card-3d">
+        <div class="score-ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="ring-bg" cx="50" cy="50" r="44"/>
+            <circle class="ring-fill" id="ring-fill" cx="50" cy="50" r="44"/>
+          </svg>
+          <div class="score-val" id="score-val">0</div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:8px;">Risk Score</div>
+        <div class="score-level-badge" id="score-badge">—</div>
       </div>
-      <div class="summary-card">
-        <div class="summary-title">Analysis Summary</div>
-        <div class="summary-text" id="summary-text">—</div>
-        <div class="stats-row">
-          <div class="stat"><div class="stat-num" id="stat-total">—</div><div class="stat-lbl">clauses analyzed</div></div>
-          <div class="stat"><div class="stat-num" id="stat-flagged">—</div><div class="stat-lbl">risks detected</div></div>
-          <div class="stat"><div class="stat-num" id="stat-time">—</div><div class="stat-lbl">processing time</div></div>
+
+      <div class="score-summary-panel">
+        <div class="summary-headline" id="sum-head">Assessment complete.</div>
+        <div class="summary-body" id="sum-body">—</div>
+        <div class="meta-trio">
+          <div class="meta-piece">
+            <span class="meta-n" id="m-total">—</span>
+            <span class="meta-l">Clauses</span>
+          </div>
+          <div class="meta-piece">
+            <span class="meta-n" id="m-flagged">—</span>
+            <span class="meta-l">Risks</span>
+          </div>
+          <div class="meta-piece">
+            <span class="meta-n" id="m-ms">—</span>
+            <span class="meta-l">ms</span>
+          </div>
         </div>
       </div>
     </div>
-    <div class="section-heading">Category Breakdown</div>
-    <div class="categories-grid" id="categories-grid"></div>
-    <div class="section-heading" id="clauses-heading" style="margin-top:8px;">Flagged Clauses</div>
-    <div class="clauses-list" id="clauses-list"></div>
+
+    <div class="cat-eyebrow">Category Breakdown</div>
+    <div class="cat-grid" id="cat-grid"></div>
+
+    <div class="clauses-eyebrow" id="clauses-eye">Flagged Clauses</div>
+    <div class="clause-stack" id="clause-stack"></div>
+  </div>
+</section>
+
+<!-- ABOUT STRIP -->
+<div class="about-strip">
+  <div>
+    <div class="section-eyebrow reveal" style="margin-bottom:20px;">About ClauseGuard</div>
+    <h2 class="about-heading reveal reveal-delay-1">
+      The legal language<br/>
+      you're <em>never</em> meant<br/>
+      to understand.
+    </h2>
+    <p class="about-body reveal reveal-delay-2" style="margin-top:24px;">
+      Built as a capstone security research project at Simon Fraser University. ClauseGuard treats legal document analysis as a defensive security problem — surfacing the risk language that platforms count on users never reading.
+    </p>
+  </div>
+  <div>
+    <div class="risk-list" id="risk-list">
+      <div class="risk-row"><span>Data Sharing</span><span class="risk-row-weight">22%</span></div>
+      <div class="risk-row"><span>Tracking & Profiling</span><span class="risk-row-weight">20%</span></div>
+      <div class="risk-row"><span>Third-Party Access</span><span class="risk-row-weight">13%</span></div>
+      <div class="risk-row"><span>Data Retention</span><span class="risk-row-weight">13%</span></div>
+      <div class="risk-row"><span>Arbitration</span><span class="risk-row-weight">13%</span></div>
+      <div class="risk-row"><span>Content & IP Rights</span><span class="risk-row-weight">10%</span></div>
+      <div class="risk-row"><span>Liability Limitation</span><span class="risk-row-weight">9%</span></div>
+    </div>
   </div>
 </div>
 
+<!-- FOOTER -->
 <footer>
-  <div>ClauseGuard · Simon Fraser University Capstone · Tanish Rathore</div>
-  <div><a href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">GitHub</a> &nbsp;·&nbsp; <a href="https://clauseguard-production-183f.up.railway.app/health" target="_blank">API Health</a></div>
+  <div class="footer-logo">ClauseGuard &nbsp;/&nbsp; SFU 2026</div>
+  <div class="footer-links">
+    <a href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">GitHub</a>
+    <a href="https://clauseguard-production-183f.up.railway.app/health" target="_blank">API Status</a>
+    <a href="https://ogscriptkiddie.github.io/personal_portfolio/" target="_blank">Portfolio</a>
+  </div>
 </footer>
 
+<!-- THREE.JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const API='https://clauseguard-production-183f.up.railway.app';
-let currentTab='url', pendingText='';
-const SAMPLES={
-  arbitration:`DISPUTES AND ARBITRATION\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration, and court review of an arbitration award is very limited. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one (1) year after the date the party asserting the claim first knows or reasonably should know of the act giving rise to the claim.`,
-  data_selling:`SHARING YOUR INFORMATION\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
-  content_license:`USER CONTENT LICENSE\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights, such as your right to be identified as the author of any content you submit. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
-  liability:`DISCLAIMER OF WARRANTIES AND LIMITATION OF LIABILITY\nTHE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, WE DISCLAIM ALL WARRANTIES. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. YOU AGREE THAT YOUR SOLE AND EXCLUSIVE REMEDY FOR ANY PROBLEMS IS TO STOP USING THE SERVICES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US.`,
-  full:`TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, distribute, and process any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice to you.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences based on collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION LAWSUIT. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR THEY ARE PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. THE SERVICES ARE PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
+/* ═══════════════════════════════════════════════════════════
+   THREE.JS — 3D Crystal in hero
+═══════════════════════════════════════════════════════════ */
+(function() {
+  const canvas = document.getElementById('three-canvas');
+  const parent = canvas.parentElement;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.z = 5;
+
+  // Icosahedron — solid + wireframe
+  const geo = new THREE.IcosahedronGeometry(1.6, 1);
+
+  const solidMat = new THREE.MeshPhongMaterial({
+    color: 0x111520,
+    emissive: 0x0A0F1A,
+    specular: 0x334466,
+    shininess: 80,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const solid = new THREE.Mesh(geo, solidMat);
+  scene.add(solid);
+
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: 0x4466AA,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.25,
+  });
+  const wire = new THREE.Mesh(geo, wireMat);
+  scene.add(wire);
+
+  // Outer glow ring
+  const ringGeo = new THREE.TorusGeometry(2.1, 0.006, 8, 80);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x3355AA, transparent: true, opacity: 0.3 });
+  const ring1 = new THREE.Mesh(ringGeo, ringMat);
+  ring1.rotation.x = Math.PI / 2.5;
+  scene.add(ring1);
+
+  const ring2 = new THREE.Mesh(
+    new THREE.TorusGeometry(2.4, 0.004, 8, 80),
+    new THREE.MeshBasicMaterial({ color: 0x223366, transparent: true, opacity: 0.2 })
+  );
+  ring2.rotation.x = Math.PI / 1.6;
+  ring2.rotation.z = Math.PI / 4;
+  scene.add(ring2);
+
+  // Floating particles
+  const partCount = 60;
+  const positions = new Float32Array(partCount * 3);
+  for (let i = 0; i < partCount * 3; i++) {
+    positions[i] = (Math.random() - 0.5) * 7;
+  }
+  const partGeo = new THREE.BufferGeometry();
+  partGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const partMat = new THREE.PointsMaterial({
+    color: 0x4466BB, size: 0.04, transparent: true, opacity: 0.6
+  });
+  const particles = new THREE.Points(partGeo, partMat);
+  scene.add(particles);
+
+  // Lights
+  const ambLight = new THREE.AmbientLight(0x112244, 2);
+  scene.add(ambLight);
+
+  const dirLight = new THREE.DirectionalLight(0x4488FF, 1.5);
+  dirLight.position.set(2, 3, 4);
+  scene.add(dirLight);
+
+  const redLight = new THREE.PointLight(0xE8322C, 0.8, 8);
+  redLight.position.set(-3, -2, 2);
+  scene.add(redLight);
+
+  // Mouse parallax
+  let mouseX = 0, mouseY = 0;
+  document.addEventListener('mousemove', e => {
+    mouseX = (e.clientX / window.innerWidth  - .5) * 2;
+    mouseY = (e.clientY / window.innerHeight - .5) * 2;
+  });
+
+  let riskColor = new THREE.Color(0x4466AA);
+  let riskSpeed = 1;
+
+  // Expose to window so we can update from results
+  window.setCrystalRisk = function(level) {
+    if      (level === 'HIGH')   { riskColor.set(0xE8322C); riskSpeed = 2.2; }
+    else if (level === 'MEDIUM') { riskColor.set(0xE8890A); riskSpeed = 1.5; }
+    else                         { riskColor.set(0x1A9E52); riskSpeed = 0.7; }
+    wireMat.color = riskColor;
+    ringMat.color = riskColor;
+  };
+
+  // Resize
+  function resize() {
+    const w = parent.clientWidth;
+    const h = parent.clientHeight || 500;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Animate
+  let t = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    t += 0.006 * riskSpeed;
+
+    solid.rotation.x = t * 0.4 + mouseY * 0.15;
+    solid.rotation.y = t * 0.6 + mouseX * 0.15;
+    wire.rotation.x  = solid.rotation.x;
+    wire.rotation.y  = solid.rotation.y;
+
+    ring1.rotation.z = t * 0.3;
+    ring2.rotation.z = -t * 0.2;
+
+    particles.rotation.y = t * 0.05;
+    particles.rotation.x = t * 0.03;
+
+    // Pulse red light
+    redLight.intensity = 0.5 + Math.sin(t * 3) * 0.3;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   CURSOR
+═══════════════════════════════════════════════════════════ */
+const cur  = document.getElementById('cursor');
+const curR = document.getElementById('cursor-ring');
+let cx = 0, cy = 0, rx = 0, ry = 0;
+document.addEventListener('mousemove', e => { cx = e.clientX; cy = e.clientY; });
+(function cursorLoop() {
+  requestAnimationFrame(cursorLoop);
+  rx += (cx - rx) * 0.12;
+  ry += (cy - ry) * 0.12;
+  cur.style.left  = cx + 'px';  cur.style.top  = cy + 'px';
+  curR.style.left = rx + 'px'; curR.style.top = ry + 'px';
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   NAV scroll effect
+═══════════════════════════════════════════════════════════ */
+window.addEventListener('scroll', () => {
+  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 40);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   SCROLL REVEAL (Intersection Observer)
+═══════════════════════════════════════════════════════════ */
+const revealObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('visible'); }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+
+// Risk list stagger
+const riskObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const rows = e.target.querySelectorAll('.risk-row');
+      rows.forEach((r, i) => {
+        setTimeout(() => r.classList.add('visible'), i * 80);
+      });
+    }
+  });
+}, { threshold: 0.2 });
+const rl = document.getElementById('risk-list');
+if (rl) riskObs.observe(rl);
+
+/* ═══════════════════════════════════════════════════════════
+   ANALYZER LOGIC
+═══════════════════════════════════════════════════════════ */
+const API = 'https://clauseguard-production-183f.up.railway.app';
+let activeTab = 'url';
+let fetchedText = '';
+
+const SAMPLES = {
+  arb:  `DISPUTES AND ARBITRATION\n\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration, and court review of an arbitration award is very limited. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one year after the date the party asserting the claim first knows or reasonably should know of the act.`,
+  data: `SHARING YOUR INFORMATION\n\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
+  ip:   `USER CONTENT LICENSE\n\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
+  liab: `DISCLAIMER AND LIABILITY CAP\n\nTHE SERVICES ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US AS A RESULT OF OUR DECISION TO REMOVE OR RESTRICT ACCESS TO YOUR CONTENT.`,
+  full: `TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, distribute, and process any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences from collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION LAWSUIT. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. THE SERVICES ARE PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
 };
-function switchTab(name,btn){
-  currentTab=name;
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+
+function scrollToAnalyzer() {
+  document.getElementById('analyzer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function switchTab(name, btn) {
+  activeTab = name;
+  fetchedText = '';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('tab-'+name).classList.add('active');
-  updateCharCount();
+  document.getElementById('panel-url').style.display   = name === 'url'   ? 'block' : 'none';
+  document.getElementById('panel-paste').style.display = name === 'paste' ? 'block' : 'none';
+  updateCharCt();
 }
-function setUrl(url){
-  document.getElementById('url-input').value=url;
-  setFetchStatus('','');
-  pendingText='';
-  updateCharCount();
+
+function setUrl(url) {
+  document.getElementById('url-in').value = url;
+  setFetchMsg('', ''); fetchedText = ''; updateCharCt();
 }
-function updateCharCount(){
-  const el=document.getElementById('char-count');
-  if(currentTab==='paste'){
-    const n=document.getElementById('tos-input').value.length;
-    el.textContent=n.toLocaleString()+' characters';
-  } else if(pendingText){
-    el.textContent=pendingText.length.toLocaleString()+' characters fetched';
-  } else { el.textContent='—'; }
+
+function setFetchMsg(txt, cls) {
+  const el = document.getElementById('fetch-msg');
+  el.textContent = txt; el.className = 'fetch-msg' + (cls ? ' ' + cls : '');
 }
-document.getElementById('tos-input').addEventListener('input',updateCharCount);
-document.getElementById('url-input').addEventListener('input',()=>{pendingText='';setFetchStatus('','');updateCharCount();});
-function setFetchStatus(msg,type){
-  const el=document.getElementById('fetch-status');
-  el.textContent=msg; el.className='fetch-status'+(type?' '+type:'');
+
+function updateCharCt() {
+  const el = document.getElementById('char-ct');
+  if (activeTab === 'paste') {
+    const n = document.getElementById('paste-ta').value.length;
+    el.textContent = n ? n.toLocaleString() + ' chars' : '—';
+  } else if (fetchedText) {
+    el.textContent = fetchedText.length.toLocaleString() + ' chars fetched';
+  } else { el.textContent = '—'; }
 }
-async function fetchAndAnalyze(){
-  const url=document.getElementById('url-input').value.trim();
-  if(!url){setFetchStatus('Please enter a URL.','error');return;}
-  const btn=document.getElementById('fetch-btn');
-  btn.disabled=true; pendingText='';
-  setFetchStatus('⟳ Fetching page...','loading');
-  updateCharCount();
-  try{
-    const res=await fetch(`${API}/fetch-url`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
-    const data=await res.json();
-    if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);
-    pendingText=data.text;
-    setFetchStatus(`✓ Fetched ${data.char_count.toLocaleString()} characters — analyzing...`,'success');
-    updateCharCount();
-    await runAnalysis(pendingText);
-  }catch(e){setFetchStatus('✗ '+e.message,'error');}
-  finally{btn.disabled=false;}
+
+document.getElementById('paste-ta').addEventListener('input', updateCharCt);
+document.getElementById('url-in').addEventListener('input', () => {
+  fetchedText = ''; setFetchMsg('', ''); updateCharCt();
+});
+
+function loadSample(key) {
+  document.getElementById('paste-ta').value = SAMPLES[key];
+  updateCharCt();
 }
-function loadSample(key){
-  document.getElementById('tos-input').value=SAMPLES[key];
-  updateCharCount();
+
+async function fetchGo() {
+  const url = document.getElementById('url-in').value.trim();
+  if (!url) { setFetchMsg('Enter a URL to fetch.', 'err'); return; }
+
+  const btn = document.getElementById('url-btn');
+  btn.disabled = true; fetchedText = '';
+  setFetchMsg('↗ Fetching via server…', 'wait'); updateCharCt();
+
+  try {
+    const res = await fetch(`${API}/fetch-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+    fetchedText = data.text;
+    setFetchMsg(`↗ ${data.char_count.toLocaleString()} chars fetched — running analysis…`, 'ok');
+    updateCharCt();
+    await runAnalysis(fetchedText);
+  } catch (e) {
+    let msg = e.message;
+    if (msg.includes('fetch') || msg.includes('Failed')) msg = 'Server unreachable. Try the Paste Text tab.';
+    setFetchMsg('✗ ' + msg, 'err');
+  } finally { btn.disabled = false; }
 }
-function analyzeText(){
-  const text=currentTab==='url'?pendingText:document.getElementById('tos-input').value.trim();
-  if(!text||text.length<50){
-    showError(currentTab==='url'?'Please fetch a URL first, or switch to the Paste Text tab.':'Please paste at least 50 characters of text, or load a sample.');
+
+function analyze() {
+  const text = activeTab === 'url'
+    ? fetchedText
+    : document.getElementById('paste-ta').value.trim();
+  if (!text || text.length < 50) {
+    showErr(activeTab === 'url'
+      ? 'Fetch a URL first, or switch to Paste Text.'
+      : 'Paste at least 50 characters, or load a sample.');
     return;
   }
   runAnalysis(text);
 }
-const scanLogs=['Segmenting into legal clauses...','Running rule-based classifier...','Detecting negation patterns...','Computing category scores...','Generating risk summary...','Finalizing results...'];
-async function runAnalysis(text){
-  document.getElementById('results').classList.remove('active');
-  document.getElementById('error-card').classList.remove('active');
-  document.getElementById('scanning').classList.add('active');
-  document.getElementById('analyze-btn').disabled=true;
-  let logIdx=0;
-  const logEl=document.getElementById('scan-log');
-  const logInterval=setInterval(()=>{logEl.textContent=scanLogs[logIdx++%scanLogs.length];},600);
-  try{
-    const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
-    clearInterval(logInterval);
-    if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error||`HTTP ${res.status}`);}
-    renderResults(await res.json());
-  }catch(e){clearInterval(logInterval);showError('Analysis failed: '+e.message);}
-  finally{document.getElementById('scanning').classList.remove('active');document.getElementById('analyze-btn').disabled=false;}
+
+const LOGS = [
+  'Segmenting legal clauses…',
+  'Running rule classifier…',
+  'Checking negation patterns…',
+  'Computing category weights…',
+  'Building risk profile…',
+  'Finalizing…'
+];
+
+function show(id) { document.getElementById(id).classList.add('on'); }
+function hide(id) { document.getElementById(id).classList.remove('on'); }
+
+async function runAnalysis(text) {
+  hide('results'); hide('err-block');
+  show('scan-overlay');
+  document.getElementById('run-btn').disabled = true;
+
+  let i = 0;
+  const sub = document.getElementById('scan-sub-txt');
+  const t = setInterval(() => { sub.textContent = LOGS[i++ % LOGS.length]; }, 700);
+
+  try {
+    const res = await fetch(`${API}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    clearInterval(t);
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+    render(await res.json());
+  } catch (e) {
+    clearInterval(t);
+    showErr('Analysis error: ' + e.message);
+  } finally {
+    hide('scan-overlay');
+    document.getElementById('run-btn').disabled = false;
+  }
 }
-function showError(msg){
-  const el=document.getElementById('error-card');
-  el.textContent='⚠ '+msg; el.classList.add('active');
-  document.getElementById('scanning').classList.remove('active');
-  document.getElementById('analyze-btn').disabled=false;
+
+function showErr(msg) {
+  const el = document.getElementById('err-block');
+  el.textContent = '✗  ' + msg; show('err-block');
+  hide('scan-overlay');
+  document.getElementById('run-btn').disabled = false;
 }
-function renderResults(data){
-  const resultsEl=document.getElementById('results');
-  resultsEl.classList.add('active');
-  resultsEl.scrollIntoView({behavior:'smooth',block:'start'});
-  const level=data.risk_level||'LOW',score=data.risk_score||0;
-  const scoreEl=document.getElementById('score-num'),levelEl=document.getElementById('score-level');
-  scoreEl.className='score-number '+level.toLowerCase();
-  levelEl.className='score-level '+level.toLowerCase();
-  levelEl.textContent=level+' RISK';
-  let current=0,step=Math.max(1,Math.floor(score/40));
-  const counter=setInterval(()=>{current=Math.min(current+step,score);scoreEl.textContent=current;if(current>=score)clearInterval(counter);},25);
-  document.getElementById('summary-text').textContent=data.summary||'';
-  document.getElementById('stat-total').textContent=data.total_clauses_analyzed||0;
-  document.getElementById('stat-flagged').textContent=data.total_risk_clauses_detected||0;
-  document.getElementById('stat-time').textContent=(data.processing_time_ms||0)+'ms';
-  const catGrid=document.getElementById('categories-grid');
-  catGrid.innerHTML='';
-  Object.entries(data.category_scores||{}).forEach(([key,cat],i)=>{
-    const maxRisk=cat.max_risk_level||'NONE',pct=cat.score||0;
-    const div=document.createElement('div');
-    div.className='cat-card'; div.style.animationDelay=(i*60)+'ms';
-    div.innerHTML=`<div class="cat-top"><div class="cat-name">${cat.label||key}</div><div class="cat-count">${cat.clause_count||0} clause${cat.clause_count!==1?'s':''}</div></div><div class="cat-bar-bg"><div class="cat-bar-fill ${maxRisk.toLowerCase()}" id="bar-${key}"></div></div><div class="cat-risk ${maxRisk}">${maxRisk==='NONE'?'Clean':maxRisk+' risk'}</div>`;
-    catGrid.appendChild(div);
-    setTimeout(()=>{const b=document.getElementById('bar-'+key);if(b)b.style.width=pct+'%';},100+i*60);
+
+function lv(s) { return s === 'HIGH' ? 'H' : s === 'MEDIUM' ? 'M' : s === 'LOW' ? 'L' : 'N'; }
+
+function render(data) {
+  show('results');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const level = data.risk_level || 'LOW';
+  const lvClass = lv(level);
+  const score = data.risk_score || 0;
+
+  // Update 3D crystal
+  if (window.setCrystalRisk) window.setCrystalRisk(level);
+
+  // Score ring animation
+  const circumference = 276.5;
+  const ringEl = document.getElementById('ring-fill');
+  const ringColors = { H: '#E8322C', M: '#E8890A', L: '#1A9E52', N: '#334466' };
+  ringEl.style.stroke = ringColors[lvClass] || '#334466';
+
+  // Score count-up
+  const scoreEl = document.getElementById('score-val');
+  let cur = 0;
+  const step = Math.max(1, Math.floor(score / 45));
+  const ct = setInterval(() => {
+    cur = Math.min(cur + step, score);
+    scoreEl.textContent = cur;
+    const offset = circumference - (cur / 100) * circumference;
+    ringEl.style.strokeDashoffset = offset;
+    if (cur >= score) clearInterval(ct);
+  }, 20);
+
+  const badge = document.getElementById('score-badge');
+  badge.className = 'score-level-badge ' + lvClass;
+  badge.textContent = level + ' RISK';
+
+  const heads = { H: 'High-risk document.', M: 'Moderate risk.', L: 'Low risk detected.', N: 'All clear.' };
+  document.getElementById('sum-head').textContent = heads[lvClass] || 'Complete.';
+  document.getElementById('sum-body').textContent = data.summary || '';
+  document.getElementById('m-total').textContent   = data.total_clauses_analyzed || 0;
+  document.getElementById('m-flagged').textContent = data.total_risk_clauses_detected || 0;
+  document.getElementById('m-ms').textContent      = data.processing_time_ms || 0;
+
+  // Categories
+  const grid = document.getElementById('cat-grid');
+  grid.innerHTML = '';
+  Object.entries(data.category_scores || {}).forEach(([key, cat], i) => {
+    const rv = lv(cat.max_risk_level || 'NONE');
+    const tile = document.createElement('div');
+    tile.className = 'cat-tile';
+    tile.style.animationDelay = (i * 55) + 'ms';
+    tile.innerHTML = `
+      <span class="ct-count">${cat.clause_count || 0}</span>
+      <div class="ct-name">${cat.label || key}</div>
+      <div class="ct-track"><div class="ct-bar ${rv}" id="cb-${key}"></div></div>
+      <div class="ct-risk ${rv}">${cat.max_risk_level === 'NONE' ? 'Clear' : cat.max_risk_level}</div>
+    `;
+    grid.appendChild(tile);
+    setTimeout(() => {
+      const b = document.getElementById('cb-' + key);
+      if (b) b.style.width = (cat.score || 0) + '%';
+    }, 100 + i * 55);
   });
-  const clausesList=document.getElementById('clauses-list');
-  clausesList.innerHTML='';
-  const clauses=(data.clauses||[]).filter(c=>c.risk_level!=='NONE');
-  if(!clauses.length){clausesList.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);font-family:JetBrains Mono,monospace;font-size:13px;">✓ No significant risk clauses detected</div>';return;}
-  document.getElementById('clauses-heading').textContent=`Flagged Clauses (${clauses.length})`;
-  clauses.forEach((clause,i)=>{
-    const card=document.createElement('div');
-    card.className=`clause-card ${clause.risk_level}`; card.style.animationDelay=(i*50)+'ms';
-    const kws=(clause.matched_keywords||[]).slice(0,4).map(k=>`<span class="kw">${escHtml(k)}</span>`).join('');
-    card.innerHTML=`<div class="clause-header"><div style="flex:1"><div class="clause-meta" style="margin-bottom:8px;"><span class="risk-badge ${clause.risk_level}">${clause.risk_level}</span><span class="cat-tag">${clause.primary_category_label||clause.primary_category}</span>${clause.clause_number?`<span class="cat-tag" style="color:var(--muted)">clause ${clause.clause_number}</span>`:''}</div><div class="clause-text-plain">${escHtml(truncate(clause.text,200))}</div></div><button class="toggle-btn" onclick="toggleRaw(this)">See clause</button></div>${kws?`<div class="keywords-row">${kws}</div>`:''}<div class="clause-raw">${escHtml(clause.text)}</div>`;
-    clausesList.appendChild(card);
+
+  // Clauses
+  const stack = document.getElementById('clause-stack');
+  stack.innerHTML = '';
+  const clauses = (data.clauses || []).filter(c => c.risk_level !== 'NONE');
+
+  document.getElementById('clauses-eye').textContent =
+    clauses.length ? `Flagged Clauses — ${clauses.length}` : 'Flagged Clauses';
+
+  if (!clauses.length) {
+    stack.innerHTML = `<div style="padding:32px 0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(255,255,255,.25);letter-spacing:1px;">✓  No risk clauses detected.</div>`;
+    return;
+  }
+
+  clauses.forEach((c, i) => {
+    const rv = lv(c.risk_level);
+    const card = document.createElement('div');
+    card.className = `clause-card ${rv}`;
+    card.style.animationDelay = (i * 45) + 'ms';
+    const kws = (c.matched_keywords || []).slice(0, 5).map(k => `<span class="kw-tag">${esc(k)}</span>`).join('');
+    card.innerHTML = `
+      <div class="cc-head" onclick="toggleRaw(this)">
+        <div class="cc-left">
+          <div class="cc-tags">
+            <span class="badge ${rv}">${c.risk_level}</span>
+            <span class="badge-cat">${c.primary_category_label || c.primary_category}</span>
+            ${c.clause_number ? `<span class="badge-num">§${c.clause_number}</span>` : ''}
+          </div>
+          <div class="cc-excerpt">${esc(trunc(c.text, 220))}</div>
+        </div>
+        <button class="cc-toggle">View</button>
+      </div>
+      ${kws ? `<div class="cc-kws">${kws}</div>` : ''}
+      <div class="cc-raw">${esc(c.text)}</div>
+    `;
+    stack.appendChild(card);
   });
 }
-function toggleRaw(btn){const raw=btn.closest('.clause-card').querySelector('.clause-raw');btn.textContent=raw.classList.toggle('open')?'Hide clause':'See clause';}
-function escHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function truncate(str,n){return str.length>n?str.slice(0,n)+'…':str;}
-document.getElementById('tos-input').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')analyzeText();});
+
+function toggleRaw(head) {
+  const raw = head.closest('.clause-card').querySelector('.cc-raw');
+  const btn = head.querySelector('.cc-toggle');
+  btn.textContent = raw.classList.toggle('open') ? 'Hide' : 'View';
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function trunc(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') analyze();
+});
 </script>
 </body>
 </html>
