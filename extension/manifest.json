@@ -1,22 +1,28 @@
 {
   "manifest_version": 3,
   "name": "ClauseGuard",
-  "version": "2.0.0",
-  "description": "Automatically detects privacy & security risks in Terms of Service. Alerts you before you sign up.",
+  "version": "1.0.0",
+  "description": "Automatically detects and classifies privacy & security risks in Terms of Service and Privacy Policy documents.",
 
   "permissions": [
     "activeTab",
     "scripting",
+    "tabs",
     "storage"
   ],
 
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "ClauseGuard — Analyze this page"
-  },
-
   "background": {
     "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ClauseGuard — Analyze this page",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
 
   "content_scripts": [
@@ -28,6 +34,7 @@
   ],
 
   "host_permissions": [
-    "http://localhost:5000/*"
+    "http://localhost:5000/*",
+    "https://clauseguard-production-183f.up.railway.app/*"
   ]
 }
