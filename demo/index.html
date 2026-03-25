@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ClauseGuard — Privacy Risk Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#060c1a;--bg2:#0d1528;--bg3:#111e35;--blue:#00bfff;--blue2:#0077cc;--red:#ff3355;--amber:#ffaa00;--green:#00e87a;--text:#e8edf5;--muted:#5a7090;--border:#1a2d4a;--card:#0d1a2e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,191,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,191,255,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+body::after{content:'';position:fixed;top:-200px;left:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(0,119,204,.12) 0%,transparent 70%);pointer-events:none;z-index:0}
+.glow-orb-right{position:fixed;bottom:-200px;right:-200px;width:700px;height:700px;background:radial-gradient(circle,rgba(0,191,255,.07) 0%,transparent 70%);pointer-events:none;z-index:0}
+header{position:relative;z-index:10;border-bottom:1px solid var(--border);background:rgba(6,12,26,.9);backdrop-filter:blur(12px);padding:0 40px;display:flex;align-items:center;justify-content:space-between;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;letter-spacing:-.5px;color:var(--text)}
+.logo-shield{width:32px;height:32px;background:linear-gradient(135deg,var(--blue2),var(--blue));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 0 20px rgba(0,191,255,.3)}
+.logo span{color:var(--blue)}
+.header-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse-dot 2s infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+.hero{position:relative;z-index:5;text-align:center;padding:72px 24px 48px}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,191,255,.08);border:1px solid rgba(0,191,255,.2);border-radius:100px;padding:5px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);letter-spacing:.5px;margin-bottom:28px;text-transform:uppercase}
+h1{font-family:'JetBrains Mono',monospace;font-size:clamp(32px,5vw,58px);font-weight:700;line-height:1.1;letter-spacing:-1.5px;margin-bottom:16px}
+h1 .accent{color:var(--blue)} h1 .danger{color:var(--red)}
+.hero-sub{font-size:16px;color:var(--muted);max-width:540px;margin:0 auto 48px;line-height:1.65;font-weight:300}
+.analyzer{position:relative;z-index:5;max-width:860px;margin:0 auto;padding:0 24px 80px}
+.input-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 0 1px rgba(0,191,255,.05)}
+.input-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2)}
+.tab-btn{padding:12px 20px;font-size:13px;font-family:'JetBrains Mono',monospace;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);background:rgba(0,191,255,.04)}
+.tab-panel{display:none;padding:20px}
+.tab-panel.active{display:block}
+/* URL tab */
+.url-row{display:flex;gap:10px;align-items:center}
+.url-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;transition:border-color .2s}
+.url-input:focus{border-color:var(--blue2)}
+.url-input::placeholder{color:var(--muted)}
+.fetch-btn{padding:14px 20px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--blue);font-family:'JetBrains Mono',monospace;font-size:13px;cursor:pointer;white-space:nowrap;transition:all .15s}
+.fetch-btn:hover{background:rgba(0,191,255,.08);border-color:rgba(0,191,255,.3)}
+.fetch-btn:disabled{opacity:.4;cursor:not-allowed}
+.url-quick{margin-top:14px}
+.url-quick-label{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+.url-chips{display:flex;flex-wrap:wrap;gap:7px}
+.url-chip{padding:5px 12px;background:rgba(0,191,255,.06);border:1px solid rgba(0,191,255,.15);border-radius:100px;font-size:12px;color:var(--blue);cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.url-chip:hover{background:rgba(0,191,255,.12);border-color:rgba(0,191,255,.35)}
+.fetch-status{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:12px;min-height:18px}
+.fetch-status.loading{color:var(--blue)}
+.fetch-status.success{color:var(--green)}
+.fetch-status.error{color:var(--red)}
+/* Paste tab */
+textarea{width:100%;height:180px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none;transition:border-color .2s}
+textarea:focus{border-color:var(--blue2)}
+textarea::placeholder{color:var(--muted)}
+.sample-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.sample-chip{padding:5px 12px;background:rgba(0,191,255,.06);border:1px solid rgba(0,191,255,.15);border-radius:100px;font-size:12px;color:var(--blue);cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.sample-chip:hover{background:rgba(0,191,255,.12);border-color:rgba(0,191,255,.35)}
+.input-footer{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);background:var(--bg2)}
+.char-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
+.analyze-btn{display:flex;align-items:center;gap:8px;padding:11px 28px;background:linear-gradient(135deg,var(--blue2),var(--blue));border:none;border-radius:8px;color:#fff;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.3px;transition:all .2s;box-shadow:0 0 24px rgba(0,191,255,.2)}
+.analyze-btn:hover{transform:translateY(-1px);box-shadow:0 0 32px rgba(0,191,255,.35)}
+.analyze-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.scanning-overlay{display:none;text-align:center;padding:48px 24px}
+.scanning-overlay.active{display:block}
+.scan-ring{width:80px;height:80px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;margin:0 auto 20px;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-text{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--blue);letter-spacing:1px;text-transform:uppercase}
+.scan-log{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);height:16px}
+#results{display:none;margin-top:32px}
+#results.active{display:block}
+.score-header{display:grid;grid-template-columns:200px 1fr;gap:24px;margin-bottom:24px}
+@media(max-width:600px){.score-header{grid-template-columns:1fr}}
+.score-circle-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.score-label{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px}
+.score-number{font-family:'JetBrains Mono',monospace;font-size:64px;font-weight:700;line-height:1;margin-bottom:4px;transition:color .4s}
+.score-number.high{color:var(--red);text-shadow:0 0 30px rgba(255,51,85,.4)}
+.score-number.medium{color:var(--amber);text-shadow:0 0 30px rgba(255,170,0,.4)}
+.score-number.low{color:var(--green);text-shadow:0 0 30px rgba(0,232,122,.4)}
+.score-level{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;padding:3px 10px;border-radius:100px;margin-top:6px}
+.score-level.high{background:rgba(255,51,85,.12);color:var(--red);border:1px solid rgba(255,51,85,.25)}
+.score-level.medium{background:rgba(255,170,0,.12);color:var(--amber);border:1px solid rgba(255,170,0,.25)}
+.score-level.low{background:rgba(0,232,122,.12);color:var(--green);border:1px solid rgba(0,232,122,.25)}
+.summary-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px}
+.summary-title{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:12px}
+.summary-text{font-size:14px;line-height:1.7;color:var(--text);margin-bottom:20px}
+.stats-row{display:flex;gap:20px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat-num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--blue)}
+.stat-lbl{font-size:11px;color:var(--muted)}
+.categories-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:24px}
+.cat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;opacity:0;transform:translateY(12px);animation:fadeUp .3s forwards}
+@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+.cat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cat-name{font-size:12px;color:var(--text);font-weight:500}
+.cat-count{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+.cat-bar-bg{height:5px;background:var(--bg3);border-radius:100px;overflow:hidden}
+.cat-bar-fill{height:100%;border-radius:100px;width:0;transition:width .8s cubic-bezier(.4,0,.2,1)}
+.cat-bar-fill.high{background:linear-gradient(90deg,var(--red),#ff6680)}
+.cat-bar-fill.medium{background:linear-gradient(90deg,var(--amber),#ffc84d)}
+.cat-bar-fill.low{background:linear-gradient(90deg,var(--green),#66ffaa)}
+.cat-bar-fill.none{background:var(--bg3)}
+.cat-risk{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.5px}
+.cat-risk.HIGH{color:var(--red)} .cat-risk.MEDIUM{color:var(--amber)} .cat-risk.LOW{color:var(--green)} .cat-risk.NONE{color:var(--muted)}
+.section-heading{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.section-heading::after{content:'';flex:1;height:1px;background:var(--border)}
+.clauses-list{display:flex;flex-direction:column;gap:10px}
+.clause-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;opacity:0;transform:translateY(8px);animation:fadeUp .3s forwards;transition:border-color .2s}
+.clause-card:hover{border-color:rgba(0,191,255,.2)}
+.clause-card.HIGH{border-left:3px solid var(--red)}
+.clause-card.MEDIUM{border-left:3px solid var(--amber)}
+.clause-card.LOW{border-left:3px solid var(--green)}
+.clause-header{display:flex;align-items:flex-start;justify-content:space-between;padding:16px 16px 14px;gap:12px}
+.clause-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.risk-badge{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;letter-spacing:.5px;flex-shrink:0}
+.risk-badge.HIGH{background:rgba(255,51,85,.15);color:var(--red);border:1px solid rgba(255,51,85,.3)}
+.risk-badge.MEDIUM{background:rgba(255,170,0,.15);color:var(--amber);border:1px solid rgba(255,170,0,.3)}
+.risk-badge.LOW{background:rgba(0,232,122,.12);color:var(--green);border:1px solid rgba(0,232,122,.25)}
+.cat-tag{font-size:11px;color:var(--muted);background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:4px}
+.clause-text-plain{font-size:13.5px;line-height:1.65;color:var(--text);flex:1}
+.toggle-btn{flex-shrink:0;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--blue);background:none;border:1px solid rgba(0,191,255,.2);border-radius:6px;padding:4px 10px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.toggle-btn:hover{background:rgba(0,191,255,.06)}
+.clause-raw{display:none;margin:0 16px 16px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:var(--muted)}
+.clause-raw.open{display:block}
+.keywords-row{padding:0 16px 14px;display:flex;flex-wrap:wrap;gap:5px}
+.kw{font-family:'JetBrains Mono',monospace;font-size:10px;background:rgba(0,191,255,.06);border:1px solid rgba(0,191,255,.12);color:var(--blue);padding:2px 7px;border-radius:4px}
+.error-card{background:rgba(255,51,85,.06);border:1px solid rgba(255,51,85,.2);border-radius:12px;padding:20px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--red);margin-top:20px;display:none}
+.error-card.active{display:block}
+footer{position:relative;z-index:5;border-top:1px solid var(--border);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+footer a{color:var(--blue);text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="glow-orb-right"></div>
+<header>
+  <div class="logo"><div class="logo-shield">🛡</div>Clause<span>Guard</span></div>
+  <div class="header-meta"><div class="status-dot"></div>API LIVE · clauseguard-production-183f.up.railway.app</div>
+</header>
+<div class="hero">
+  <div class="hero-badge">🔬 Live Risk Analysis Engine</div>
+  <h1>The ToS you <span class="danger">agreed to</span><br/>without <span class="accent">reading</span></h1>
+  <p class="hero-sub">Enter a URL or paste text from any Terms of Service or Privacy Policy. ClauseGuard classifies each clause across 7 risk categories and returns a weighted risk score — in seconds.</p>
+</div>
+<div class="analyzer">
+  <div class="input-card">
+    <div class="input-tabs">
+      <button class="tab-btn active" onclick="switchTab('url',this)">🔗 URL</button>
+      <button class="tab-btn" onclick="switchTab('paste',this)">📋 Paste Text</button>
+    </div>
+
+    <!-- URL TAB -->
+    <div id="tab-url" class="tab-panel active">
+      <div class="url-row">
+        <input type="url" class="url-input" id="url-input" placeholder="https://discord.com/privacy"/>
+        <button class="fetch-btn" id="fetch-btn" onclick="fetchAndAnalyze()">⚡ Fetch &amp; Analyze</button>
+      </div>
+      <div class="url-quick">
+        <div class="url-quick-label">Quick links →</div>
+        <div class="url-chips">
+          <span class="url-chip" onclick="setUrl('https://discord.com/privacy')">Discord Privacy</span>
+          <span class="url-chip" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify ToS</span>
+          <span class="url-chip" onclick="setUrl('https://policies.google.com/terms')">Google ToS</span>
+          <span class="url-chip" onclick="setUrl('https://www.reddit.com/policies/privacy-policy')">Reddit Privacy</span>
+          <span class="url-chip" onclick="setUrl('https://twitter.com/en/tos')">Twitter/X ToS</span>
+          <span class="url-chip" onclick="setUrl('https://www.tiktok.com/legal/page/us/privacy-policy/en')">TikTok Privacy</span>
+          <span class="url-chip" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn ToS</span>
+          <span class="url-chip" onclick="setUrl('https://www.microsoft.com/en-ca/servicesagreement')">Microsoft ToS</span>
+        </div>
+      </div>
+      <div class="fetch-status" id="fetch-status"></div>
+    </div>
+
+    <!-- PASTE TAB -->
+    <div id="tab-paste" class="tab-panel">
+      <textarea id="tos-input" placeholder="Paste the full Terms of Service or Privacy Policy text here..."></textarea>
+      <div class="sample-links">
+        <span style="font-size:12px;color:var(--muted);align-self:center;">Samples →</span>
+        <button class="sample-chip" onclick="loadSample('arbitration')">⚖️ Arbitration</button>
+        <button class="sample-chip" onclick="loadSample('data_selling')">📦 Data selling</button>
+        <button class="sample-chip" onclick="loadSample('content_license')">📝 Content license</button>
+        <button class="sample-chip" onclick="loadSample('liability')">🛑 Liability waiver</button>
+        <button class="sample-chip" onclick="loadSample('full')">📄 Full sample ToS</button>
+      </div>
+    </div>
+
+    <div class="input-footer">
+      <div class="char-count" id="char-count">—</div>
+      <button class="analyze-btn" id="analyze-btn" onclick="analyzeText()"><span>⚡</span> Analyze Document</button>
+    </div>
+  </div>
+
+  <div class="scanning-overlay" id="scanning">
+    <div class="scan-ring"></div>
+    <div class="scan-text">Scanning document</div>
+    <div class="scan-log" id="scan-log">Segmenting clauses...</div>
+  </div>
+  <div class="error-card" id="error-card"></div>
+
+  <div id="results">
+    <div class="score-header">
+      <div class="score-circle-wrap">
+        <div class="score-label">Risk Score</div>
+        <div class="score-number" id="score-num">0</div>
+        <div class="score-level" id="score-level">—</div>
+        <div style="margin-top:12px;font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;">out of 100</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-title">Analysis Summary</div>
+        <div class="summary-text" id="summary-text">—</div>
+        <div class="stats-row">
+          <div class="stat"><div class="stat-num" id="stat-total">—</div><div class="stat-lbl">clauses analyzed</div></div>
+          <div class="stat"><div class="stat-num" id="stat-flagged">—</div><div class="stat-lbl">risks detected</div></div>
+          <div class="stat"><div class="stat-num" id="stat-time">—</div><div class="stat-lbl">processing time</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="section-heading">Category Breakdown</div>
+    <div class="categories-grid" id="categories-grid"></div>
+    <div class="section-heading" id="clauses-heading" style="margin-top:8px;">Flagged Clauses</div>
+    <div class="clauses-list" id="clauses-list"></div>
+  </div>
+</div>
+
+<footer>
+  <div>ClauseGuard · Simon Fraser University Capstone · Tanish Rathore</div>
+  <div><a href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">GitHub</a> &nbsp;·&nbsp; <a href="https://clauseguard-production-183f.up.railway.app/health" target="_blank">API Health</a></div>
+</footer>
+
+<script>
+const API='https://clauseguard-production-183f.up.railway.app';
+let currentTab='url', pendingText='';
+const SAMPLES={
+  arbitration:`DISPUTES AND ARBITRATION\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration, and court review of an arbitration award is very limited. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one (1) year after the date the party asserting the claim first knows or reasonably should know of the act giving rise to the claim.`,
+  data_selling:`SHARING YOUR INFORMATION\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
+  content_license:`USER CONTENT LICENSE\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights, such as your right to be identified as the author of any content you submit. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
+  liability:`DISCLAIMER OF WARRANTIES AND LIMITATION OF LIABILITY\nTHE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, WE DISCLAIM ALL WARRANTIES. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. YOU AGREE THAT YOUR SOLE AND EXCLUSIVE REMEDY FOR ANY PROBLEMS IS TO STOP USING THE SERVICES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US.`,
+  full:`TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, distribute, and process any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice to you.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences based on collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION LAWSUIT. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR THEY ARE PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. THE SERVICES ARE PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
+};
+function switchTab(name,btn){
+  currentTab=name;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  updateCharCount();
+}
+function setUrl(url){
+  document.getElementById('url-input').value=url;
+  setFetchStatus('','');
+  pendingText='';
+  updateCharCount();
+}
+function updateCharCount(){
+  const el=document.getElementById('char-count');
+  if(currentTab==='paste'){
+    const n=document.getElementById('tos-input').value.length;
+    el.textContent=n.toLocaleString()+' characters';
+  } else if(pendingText){
+    el.textContent=pendingText.length.toLocaleString()+' characters fetched';
+  } else { el.textContent='—'; }
+}
+document.getElementById('tos-input').addEventListener('input',updateCharCount);
+document.getElementById('url-input').addEventListener('input',()=>{pendingText='';setFetchStatus('','');updateCharCount();});
+function setFetchStatus(msg,type){
+  const el=document.getElementById('fetch-status');
+  el.textContent=msg; el.className='fetch-status'+(type?' '+type:'');
+}
+async function fetchAndAnalyze(){
+  const url=document.getElementById('url-input').value.trim();
+  if(!url){setFetchStatus('Please enter a URL.','error');return;}
+  const btn=document.getElementById('fetch-btn');
+  btn.disabled=true; pendingText='';
+  setFetchStatus('⟳ Fetching page...','loading');
+  updateCharCount();
+  try{
+    const res=await fetch(`${API}/fetch-url`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);
+    pendingText=data.text;
+    setFetchStatus(`✓ Fetched ${data.char_count.toLocaleString()} characters — analyzing...`,'success');
+    updateCharCount();
+    await runAnalysis(pendingText);
+  }catch(e){setFetchStatus('✗ '+e.message,'error');}
+  finally{btn.disabled=false;}
+}
+function loadSample(key){
+  document.getElementById('tos-input').value=SAMPLES[key];
+  updateCharCount();
+}
+function analyzeText(){
+  const text=currentTab==='url'?pendingText:document.getElementById('tos-input').value.trim();
+  if(!text||text.length<50){
+    showError(currentTab==='url'?'Please fetch a URL first, or switch to the Paste Text tab.':'Please paste at least 50 characters of text, or load a sample.');
+    return;
+  }
+  runAnalysis(text);
+}
+const scanLogs=['Segmenting into legal clauses...','Running rule-based classifier...','Detecting negation patterns...','Computing category scores...','Generating risk summary...','Finalizing results...'];
+async function runAnalysis(text){
+  document.getElementById('results').classList.remove('active');
+  document.getElementById('error-card').classList.remove('active');
+  document.getElementById('scanning').classList.add('active');
+  document.getElementById('analyze-btn').disabled=true;
+  let logIdx=0;
+  const logEl=document.getElementById('scan-log');
+  const logInterval=setInterval(()=>{logEl.textContent=scanLogs[logIdx++%scanLogs.length];},600);
+  try{
+    const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    clearInterval(logInterval);
+    if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error||`HTTP ${res.status}`);}
+    renderResults(await res.json());
+  }catch(e){clearInterval(logInterval);showError('Analysis failed: '+e.message);}
+  finally{document.getElementById('scanning').classList.remove('active');document.getElementById('analyze-btn').disabled=false;}
+}
+function showError(msg){
+  const el=document.getElementById('error-card');
+  el.textContent='⚠ '+msg; el.classList.add('active');
+  document.getElementById('scanning').classList.remove('active');
+  document.getElementById('analyze-btn').disabled=false;
+}
+function renderResults(data){
+  const resultsEl=document.getElementById('results');
+  resultsEl.classList.add('active');
+  resultsEl.scrollIntoView({behavior:'smooth',block:'start'});
+  const level=data.risk_level||'LOW',score=data.risk_score||0;
+  const scoreEl=document.getElementById('score-num'),levelEl=document.getElementById('score-level');
+  scoreEl.className='score-number '+level.toLowerCase();
+  levelEl.className='score-level '+level.toLowerCase();
+  levelEl.textContent=level+' RISK';
+  let current=0,step=Math.max(1,Math.floor(score/40));
+  const counter=setInterval(()=>{current=Math.min(current+step,score);scoreEl.textContent=current;if(current>=score)clearInterval(counter);},25);
+  document.getElementById('summary-text').textContent=data.summary||'';
+  document.getElementById('stat-total').textContent=data.total_clauses_analyzed||0;
+  document.getElementById('stat-flagged').textContent=data.total_risk_clauses_detected||0;
+  document.getElementById('stat-time').textContent=(data.processing_time_ms||0)+'ms';
+  const catGrid=document.getElementById('categories-grid');
+  catGrid.innerHTML='';
+  Object.entries(data.category_scores||{}).forEach(([key,cat],i)=>{
+    const maxRisk=cat.max_risk_level||'NONE',pct=cat.score||0;
+    const div=document.createElement('div');
+    div.className='cat-card'; div.style.animationDelay=(i*60)+'ms';
+    div.innerHTML=`<div class="cat-top"><div class="cat-name">${cat.label||key}</div><div class="cat-count">${cat.clause_count||0} clause${cat.clause_count!==1?'s':''}</div></div><div class="cat-bar-bg"><div class="cat-bar-fill ${maxRisk.toLowerCase()}" id="bar-${key}"></div></div><div class="cat-risk ${maxRisk}">${maxRisk==='NONE'?'Clean':maxRisk+' risk'}</div>`;
+    catGrid.appendChild(div);
+    setTimeout(()=>{const b=document.getElementById('bar-'+key);if(b)b.style.width=pct+'%';},100+i*60);
+  });
+  const clausesList=document.getElementById('clauses-list');
+  clausesList.innerHTML='';
+  const clauses=(data.clauses||[]).filter(c=>c.risk_level!=='NONE');
+  if(!clauses.length){clausesList.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);font-family:JetBrains Mono,monospace;font-size:13px;">✓ No significant risk clauses detected</div>';return;}
+  document.getElementById('clauses-heading').textContent=`Flagged Clauses (${clauses.length})`;
+  clauses.forEach((clause,i)=>{
+    const card=document.createElement('div');
+    card.className=`clause-card ${clause.risk_level}`; card.style.animationDelay=(i*50)+'ms';
+    const kws=(clause.matched_keywords||[]).slice(0,4).map(k=>`<span class="kw">${escHtml(k)}</span>`).join('');
+    card.innerHTML=`<div class="clause-header"><div style="flex:1"><div class="clause-meta" style="margin-bottom:8px;"><span class="risk-badge ${clause.risk_level}">${clause.risk_level}</span><span class="cat-tag">${clause.primary_category_label||clause.primary_category}</span>${clause.clause_number?`<span class="cat-tag" style="color:var(--muted)">clause ${clause.clause_number}</span>`:''}</div><div class="clause-text-plain">${escHtml(truncate(clause.text,200))}</div></div><button class="toggle-btn" onclick="toggleRaw(this)">See clause</button></div>${kws?`<div class="keywords-row">${kws}</div>`:''}<div class="clause-raw">${escHtml(clause.text)}</div>`;
+    clausesList.appendChild(card);
+  });
+}
+function toggleRaw(btn){const raw=btn.closest('.clause-card').querySelector('.clause-raw');btn.textContent=raw.classList.toggle('open')?'Hide clause':'See clause';}
+function escHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function truncate(str,n){return str.length>n?str.slice(0,n)+'…':str;}
+document.getElementById('tos-input').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')analyzeText();});
+</script>
+</body>
+</html>
