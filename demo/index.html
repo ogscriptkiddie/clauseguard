@@ -2,996 +2,897 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>ClauseGuard — Legal Risk Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;0,900;1,400;1,700&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
-/* ─── DESIGN TOKENS ────────────────────────────────────────── */
-:root {
-  --bg:       #F7F4EE;
-  --bg2:      #EDE9E1;
-  --dark:     #080B14;
-  --dark2:    #0F1422;
-  --dark3:    #161B2E;
-  --text:     #0A0A08;
-  --muted:    #7A7060;
-  --line:     #D8D3C8;
-  --red:      #E8322C;
-  --amber:    #E8890A;
-  --green:    #1A9E52;
-  --blue:     #1A52E8;
-  --gold:     #C8901A;
-  --cream:    #F7F4EE;
-  --r-h-bg:   rgba(232,50,44,.08);
-  --r-m-bg:   rgba(232,137,10,.08);
-  --r-l-bg:   rgba(26,158,82,.08);
+/* ── TOKENS ──────────────────────────────────────────────── */
+:root{
+  --black:#000;--white:#fff;
+  --off:#F5F3EE;--off2:#EAE7DF;
+  --red:#D93025;--red2:#B02820;
+  --gold:#C8960C;
+  --grey:#6B6760;--lgrey:#D4D1CB;
+  --H:var(--red);--M:#D97706;--L:#16A34A;
+  --hbg:rgba(217,48,37,.07);--mbg:rgba(217,119,6,.07);--lbg:rgba(22,163,74,.07);
+}
+*,::before,::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;font-size:16px}
+body{
+  background:var(--black);color:var(--white);
+  font-family:'DM Sans',sans-serif;
+  overflow-x:hidden;
 }
 
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-html { scroll-behavior:smooth; }
+/* ── CURSOR ──────────────────────────────────────────────── */
+*{cursor:none!important}
+#cur,#cur2{position:fixed;border-radius:50%;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);transition:width .2s,height .2s,background .2s}
+#cur{width:8px;height:8px;background:var(--white)}
+#cur2{width:40px;height:40px;border:1px solid rgba(255,255,255,.3);background:transparent;transition:transform .1s ease,width .25s,height .25s}
+.dark-section #cur{background:var(--black)}
+.dark-section #cur2{border-color:rgba(0,0,0,.25)}
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Syne', sans-serif;
-  overflow-x: hidden;
-  cursor: none;
+/* ── NAV ─────────────────────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:0 60px;height:68px;
+  display:flex;align-items:center;justify-content:space-between;
+  transition:background .4s,border-color .4s;
+  border-bottom:1px solid transparent;
 }
+nav.solid{background:rgba(0,0,0,.92);backdrop-filter:blur(16px);border-bottom-color:rgba(255,255,255,.07)}
+nav.light-nav{background:rgba(245,243,238,.95);backdrop-filter:blur(16px);border-bottom-color:rgba(0,0,0,.08)}
 
-/* ─── CUSTOM CURSOR ─────────────────────────────────────────── */
-#cursor {
-  position: fixed;
-  width: 8px; height: 8px;
-  background: var(--text);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 9999;
-  transform: translate(-50%,-50%);
-  transition: transform .1s ease, width .2s ease, height .2s ease, background .2s ease;
-}
-#cursor-ring {
-  position: fixed;
-  width: 36px; height: 36px;
-  border: 1px solid rgba(10,10,8,.25);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 9998;
-  transform: translate(-50%,-50%);
-  transition: transform .12s ease, width .25s ease, height .25s ease, border-color .2s ease;
-}
-body:has(button:hover) #cursor { width:14px; height:14px; background:var(--red); }
-body:has(button:hover) #cursor-ring { width:52px; height:52px; border-color:rgba(232,50,44,.4); }
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.nav-logo svg{width:34px;height:38px}
+.nav-wordmark{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;letter-spacing:-.3px}
+.nav-wordmark em{color:var(--red);font-style:normal}
+.nav-light .nav-wordmark{color:var(--black)}
 
-/* ─── NAVIGATION ─────────────────────────────────────────────── */
-nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  z-index: 1000;
-  padding: 0 48px;
-  height: 60px;
-  display: flex; align-items: center; justify-content: space-between;
-  background: rgba(247,244,238,.85);
-  backdrop-filter: blur(20px) saturate(1.5);
-  border-bottom: 1px solid transparent;
-  transition: border-color .3s;
+.nav-tag{
+  font-family:'DM Mono',monospace;font-size:10px;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.4);
 }
-nav.scrolled { border-bottom-color: var(--line); }
+.nav-light .nav-tag{color:rgba(0,0,0,.35)}
 
-.nav-logo {
-  display: flex; align-items: center; gap: 10px;
-  text-decoration: none; color: var(--text);
+/* ── HERO ────────────────────────────────────────────────── */
+#hero{
+  position:relative;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;background:var(--black);
+}
+#hero-canvas{position:absolute;inset:0;width:100%;height:100%}
+
+.hero-inner{
+  position:relative;z-index:2;
+  text-align:center;padding:0 24px;
+  max-width:1000px;
 }
 
-/* SVG logo shield */
-.logo-svg { width: 32px; height: 36px; flex-shrink: 0; }
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:'DM Mono',monospace;font-size:11px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.45);
+  margin-bottom:32px;
+}
+.eyebrow-line{width:36px;height:1px;background:rgba(255,255,255,.3)}
 
-.nav-name {
-  font-family: 'Syne', sans-serif;
-  font-size: 16px; font-weight: 700;
-  letter-spacing: -.3px;
+.hero-h1{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(52px,7vw,110px);
+  font-weight:900;line-height:.95;
+  letter-spacing:-3px;
+  margin-bottom:28px;
 }
-.nav-name span { color: var(--red); }
-
-.nav-status {
-  display: flex; align-items: center; gap: 8px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px; color: var(--muted); letter-spacing: 1px;
-}
-.dot-live {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--green); box-shadow: 0 0 0 0 rgba(26,158,82,.5);
-  animation: ripple 2s infinite;
-}
-@keyframes ripple {
-  0%   { box-shadow: 0 0 0 0 rgba(26,158,82,.5); }
-  70%  { box-shadow: 0 0 0 8px rgba(26,158,82,0); }
-  100% { box-shadow: 0 0 0 0 rgba(26,158,82,0); }
+.hero-h1 em{font-style:italic;color:var(--red)}
+.hero-h1 .outline{
+  -webkit-text-stroke:1.5px rgba(255,255,255,.8);
+  color:transparent;
 }
 
-/* ─── HERO ──────────────────────────────────────────────────── */
-.hero {
-  min-height: 100vh;
-  display: grid; grid-template-columns: 1fr 1fr;
-  align-items: center;
-  padding: 80px 48px 48px;
-  gap: 48px;
-  position: relative;
-  overflow: hidden;
+.hero-sub{
+  font-family:'DM Sans',sans-serif;
+  font-size:18px;font-weight:300;
+  color:rgba(255,255,255,.55);
+  max-width:480px;margin:0 auto 48px;
+  line-height:1.7;
+  letter-spacing:.2px;
 }
 
-@media (max-width: 768px) {
-  .hero { grid-template-columns: 1fr; padding: 100px 24px 48px; }
-  .hero-visual { height: 300px; order: -1; }
+.hero-cta{
+  display:inline-flex;align-items:center;gap:14px;
+  padding:16px 40px;
+  background:var(--white);color:var(--black);
+  font-family:'DM Mono',monospace;font-size:12px;
+  font-weight:500;letter-spacing:2px;text-transform:uppercase;
+  border:none;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+  transition:background .2s,transform .15s,clip-path .15s;
+}
+.hero-cta:hover{background:var(--red);color:var(--white);transform:translateY(-2px)}
+.hero-cta svg{width:14px;height:14px}
+
+.hero-scroll{
+  position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.25);animation:bob 2.5s ease-in-out infinite;
+}
+.hero-scroll-line{width:1px;height:40px;background:linear-gradient(to bottom,rgba(255,255,255,.25),transparent)}
+@keyframes bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
+
+/* ── 3D MODEL SCENE ──────────────────────────────────────── */
+#model-scene{width:100%;height:280px;margin-top:0;background:transparent;border:none}
+#model-canvas{width:100%;height:100%}
+@media(max-width:900px){#model-scene{height:220px}}
+
+/* ── STATS STRIP ─────────────────────────────────────────── */
+.stats-strip{
+  position:relative;z-index:3;
+  background:var(--off);color:var(--black);
+  padding:80px 60px;
+  clip-path:polygon(0 40px,100% 0,100% 100%,0 100%);
+  margin-top:-40px;
+}
+.stats-strip.dark-section{background:var(--black);color:var(--white)}
+
+.stats-inner{
+  max-width:1200px;margin:0 auto;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:48px;
+  padding-top:40px;
+}
+@media(max-width:700px){.stats-inner{grid-template-columns:repeat(2,1fr)}}
+
+.stat-item{display:flex;flex-direction:column;gap:6px}
+
+.stat-n{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(48px,5vw,72px);
+  font-weight:900;line-height:1;
+  letter-spacing:-2px;
+  color:var(--red);
 }
 
-.hero-content { position: relative; z-index: 2; }
-
-.hero-kicker {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 28px;
-}
-.hero-kicker::before {
-  content: '';
-  display: block; width: 24px; height: 1px;
-  background: var(--muted);
+.stat-l{
+  font-family:'DM Mono',monospace;
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--grey);line-height:1.5;
 }
 
-h1 {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(44px, 5.5vw, 72px);
-  font-weight: 800;
-  line-height: 1.0;
-  letter-spacing: -2px;
-  color: var(--text);
-  margin-bottom: 24px;
+/* ── REVEAL ──────────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(32px);transition:opacity .7s cubic-bezier(.4,0,.2,1),transform .7s cubic-bezier(.4,0,.2,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:.1s}
+.reveal-delay-2{transition-delay:.2s}
+.reveal-delay-3{transition-delay:.3s}
+.reveal-delay-4{transition-delay:.4s}
+
+/* ── ANALYZER SECTION ────────────────────────────────────── */
+#analyzer{
+  background:var(--black);
+  padding:120px 60px;
+  position:relative;overflow:hidden;
 }
 
-h1 .word-red { color: var(--red); font-style: italic; }
-h1 .word-outline {
-  -webkit-text-stroke: 2px var(--text);
-  color: transparent;
-  font-weight: 800;
+#analyzer::before{
+  content:'';position:absolute;
+  top:-1px;left:0;right:0;height:80px;
+  background:var(--off);
+  clip-path:polygon(0 0,100% 0,100% 1px,0 80px);
 }
 
-.hero-body {
-  font-family: 'Instrument Serif', serif;
-  font-size: 18px; font-style: italic;
-  color: var(--muted); line-height: 1.7;
-  max-width: 400px;
-  margin-bottom: 40px;
+.section-eyebrow{
+  font-family:'DM Mono',monospace;
+  font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.3);
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:56px;
+}
+.section-eyebrow::after{content:'';height:1px;width:48px;background:rgba(255,255,255,.12)}
+
+.analyzer-grid{
+  max-width:1100px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 400px;gap:80px;align-items:start;
+}
+@media(max-width:900px){.analyzer-grid{grid-template-columns:1fr}}
+
+/* Input area */
+.input-heading{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(32px,3.5vw,48px);
+  font-weight:700;
+  color:var(--white);line-height:1.15;
+  letter-spacing:-1px;
+  margin-bottom:40px;
+}
+.input-heading em{font-style:italic;color:var(--red)}
+
+/* Tabs */
+.tabs{
+  display:flex;gap:0;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  margin-bottom:32px;
+}
+.tab-btn{
+  font-family:'DM Mono',monospace;font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.35);background:none;border:none;
+  padding:10px 20px 10px 0;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:color .2s,border-color .2s;
+}
+.tab-btn.active{color:var(--white);border-bottom-color:var(--red)}
+
+/* URL input */
+.url-row{
+  display:flex;gap:0;
+  border:1px solid rgba(255,255,255,.12);
+  transition:border-color .2s;
+  margin-bottom:16px;
+}
+.url-row:focus-within{border-color:rgba(255,255,255,.35)}
+.url-in{
+  flex:1;background:none;border:none;
+  padding:16px 20px;
+  font-family:'DM Mono',monospace;font-size:13px;
+  color:var(--white);outline:none;
+}
+.url-in::placeholder{color:rgba(255,255,255,.2)}
+.url-go{
+  background:var(--red);border:none;
+  padding:0 28px;
+  font-family:'DM Mono',monospace;font-size:11px;
+  font-weight:500;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--white);
+  transition:background .15s;
+}
+.url-go:hover{background:var(--red2)}
+.url-go:disabled{opacity:.4}
+
+.quick-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+.ql-sep{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.2);text-transform:uppercase}
+.ql{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:rgba(255,255,255,.35);background:none;
+  border:1px solid rgba(255,255,255,.08);
+  padding:5px 12px;
+  transition:all .15s;letter-spacing:.3px;
+}
+.ql:hover{color:var(--white);border-color:rgba(255,255,255,.2)}
+
+.fetch-msg{
+  font-family:'DM Mono',monospace;font-size:11px;
+  min-height:18px;margin-bottom:4px;
+}
+.fetch-msg.ok{color:var(--L)}
+.fetch-msg.err{color:var(--red)}
+.fetch-msg.wait{color:rgba(255,255,255,.45)}
+
+/* Paste */
+.paste-ta{
+  width:100%;height:200px;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.1);
+  padding:20px;color:var(--white);
+  font-family:'DM Mono',monospace;font-size:12.5px;
+  line-height:1.7;resize:vertical;outline:none;
+  transition:border-color .2s;
+}
+.paste-ta:focus{border-color:rgba(255,255,255,.3)}
+.paste-ta::placeholder{color:rgba(255,255,255,.18)}
+
+.sample-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+
+/* Bottom bar */
+.input-bottom{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:24px;padding-top:20px;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+.char-ct{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,.25)}
+.run-btn{
+  font-family:'DM Mono',monospace;font-size:11px;
+  font-weight:500;letter-spacing:2px;text-transform:uppercase;
+  padding:14px 40px;
+  background:var(--white);color:var(--black);border:none;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+  transition:background .15s,transform .1s;
+}
+.run-btn:hover{background:var(--red);color:var(--white);transform:translateY(-2px)}
+.run-btn:disabled{opacity:.3;transform:none}
+
+/* Sidebar */
+.analyzer-sidebar{}
+
+.sidebar-card{
+  border:1px solid rgba(255,255,255,.08);
+  padding:28px;margin-bottom:16px;
+  background:rgba(255,255,255,.02);
 }
 
-.hero-cta-row {
-  display: flex; align-items: center; gap: 20px;
+.sidebar-title{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.25);
+  margin-bottom:20px;
 }
 
-.cta-main {
-  padding: 14px 32px;
-  background: var(--text);
-  color: var(--cream);
-  font-family: 'Syne', sans-serif;
-  font-size: 13px; font-weight: 600;
-  letter-spacing: .5px;
-  border: none; cursor: pointer;
-  transition: transform .15s, background .2s;
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+.risk-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);
+  font-size:13px;color:rgba(255,255,255,.6);
+  font-weight:300;
 }
-.cta-main:hover { background: var(--red); transform: translateY(-2px); }
-
-.cta-sub {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px; color: var(--muted); letter-spacing: .5px;
+.risk-row:last-child{border-bottom:none}
+.risk-weight{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:rgba(255,255,255,.25);
 }
 
-/* ─── THREE.JS CANVAS ───────────────────────────────────────── */
-.hero-visual {
-  position: relative;
-  display: flex; align-items: center; justify-content: center;
+/* ── SCANNING ─────────────────────────────────────────────── */
+#scan-wrap{display:none;padding:80px 0;text-align:center}
+#scan-wrap.on{display:block}
+.scan-orb{
+  width:72px;height:72px;margin:0 auto 24px;
+  border:1px solid rgba(255,255,255,.1);
+  border-top-color:var(--red);
+  border-radius:50%;
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-title{
+  font-family:'DM Mono',monospace;font-size:11px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.5);
+}
+.scan-sub{margin-top:8px;font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,.25);min-height:16px}
+
+/* ── ERROR ────────────────────────────────────────────────── */
+#err-block{
+  display:none;margin-top:20px;
+  padding:16px 20px;
+  border-left:2px solid var(--red);
+  background:rgba(217,48,37,.06);
+  font-family:'DM Mono',monospace;font-size:12px;
+  color:rgba(217,48,37,.9);line-height:1.6;
+}
+#err-block.on{display:block}
+
+/* ── RESULTS ──────────────────────────────────────────────── */
+#results{display:none;margin-top:80px}
+#results.on{display:block}
+
+/* Score panel */
+.result-header{
+  display:grid;grid-template-columns:240px 1fr;gap:40px;
+  margin-bottom:60px;
+  padding-bottom:60px;
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+@media(max-width:640px){.result-header{grid-template-columns:1fr}}
+
+.score-panel{
+  border:1px solid rgba(255,255,255,.08);
+  padding:36px 28px;text-align:center;
+  background:rgba(255,255,255,.02);
+  position:relative;overflow:hidden;
+}
+.score-panel::before{
+  content:'';position:absolute;inset:0;
+  background:conic-gradient(var(--risk-col,rgba(255,255,255,.04)) calc(var(--score-pct,0) * 1%),transparent 0);
+  opacity:.1;transition:--score-pct 1s;
 }
 
-#three-canvas {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+.score-eyebrow{
+  font-family:'DM Mono',monospace;font-size:8px;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.25);margin-bottom:12px;
 }
 
-.crystal-label {
-  position: absolute; bottom: 24px; right: 0;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--muted); writing-mode: vertical-rl;
-  opacity: .5;
+/* SVG ring */
+.ring-wrap{width:120px;height:120px;margin:0 auto 16px;position:relative}
+.ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:rgba(255,255,255,.06);stroke-width:3}
+.ring-fg{fill:none;stroke-width:3;stroke-linecap:round;stroke-dasharray:339;stroke-dashoffset:339;transition:stroke-dashoffset 1.3s cubic-bezier(.4,0,.2,1),stroke .5s}
+.ring-num{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Playfair Display',serif;
+  font-size:38px;font-weight:900;color:var(--white);
+  letter-spacing:-1px;
 }
 
-/* ─── SCROLL REVEAL ─────────────────────────────────────────── */
-.reveal {
-  opacity: 0;
-  transform: translateY(40px);
-  transition: opacity .7s cubic-bezier(.4,0,.2,1), transform .7s cubic-bezier(.4,0,.2,1);
+.score-badge{
+  display:inline-block;
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:2px;text-transform:uppercase;
+  padding:4px 12px;border:1px solid;margin-top:6px;
 }
-.reveal.visible { opacity: 1; transform: translateY(0); }
-.reveal-delay-1 { transition-delay: .1s; }
-.reveal-delay-2 { transition-delay: .2s; }
-.reveal-delay-3 { transition-delay: .3s; }
-.reveal-delay-4 { transition-delay: .4s; }
+.score-badge.H{color:var(--H);border-color:var(--H);background:var(--hbg)}
+.score-badge.M{color:var(--M);border-color:var(--M);background:var(--mbg)}
+.score-badge.L{color:var(--L);border-color:var(--L);background:var(--lbg)}
 
-/* ─── STATS STRIP ───────────────────────────────────────────── */
-.stats-strip {
-  background: var(--dark);
-  padding: 0 48px;
-  display: flex; align-items: stretch;
-  border-top: 1px solid rgba(255,255,255,.04);
-  overflow-x: auto;
-}
+/* Summary */
+.result-summary{display:flex;flex-direction:column;gap:20px;justify-content:center}
 
-.stat-item {
-  flex: 1; min-width: 140px;
-  padding: 32px 0;
-  display: flex; flex-direction: column; gap: 6px;
-  border-right: 1px solid rgba(255,255,255,.06);
-  padding-right: 40px; padding-left: 40px;
-}
-.stat-item:first-child { padding-left: 0; }
-.stat-item:last-child { border-right: none; }
-
-.stat-num {
-  font-family: 'Syne', sans-serif;
-  font-size: 40px; font-weight: 800;
-  color: #fff; line-height: 1;
-  letter-spacing: -1.5px;
-}
-.stat-num span { color: var(--gold); }
-
-.stat-lbl {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
-  color: rgba(255,255,255,.35);
+.result-verdict{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(22px,2.5vw,32px);
+  font-weight:700;color:var(--white);
+  line-height:1.2;letter-spacing:-.5px;
 }
 
-/* ─── SECTION SHARED ────────────────────────────────────────── */
-section {
-  padding: 100px 48px;
-}
-@media (max-width: 600px) { section, nav, .hero { padding-left: 20px; padding-right: 20px; } }
-
-.section-eyebrow {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 48px;
-  display: flex; align-items: center; gap: 12px;
-}
-.section-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--line); max-width: 80px; }
-
-/* ─── ANALYZER SECTION ──────────────────────────────────────── */
-#analyzer {
-  background: var(--dark);
-  padding: 100px 48px;
+.result-body{
+  font-family:'DM Sans',sans-serif;
+  font-size:14.5px;font-weight:300;
+  color:rgba(255,255,255,.55);line-height:1.8;
 }
 
-/* Tab switcher */
-.tabs {
-  display: inline-flex;
-  border: 1px solid rgba(255,255,255,.1);
-  padding: 4px;
-  gap: 4px;
-  margin-bottom: 32px;
+.result-meta{
+  display:flex;gap:32px;flex-wrap:wrap;
+  padding-top:20px;border-top:1px solid rgba(255,255,255,.06);
 }
-
-.tab-btn {
-  font-family: 'Syne', sans-serif;
-  font-size: 12px; font-weight: 600;
-  letter-spacing: .5px;
-  padding: 9px 24px;
-  background: none; border: none;
-  color: rgba(255,255,255,.4); cursor: pointer;
-  transition: all .2s;
+.meta-item{display:flex;flex-direction:column;gap:4px}
+.meta-n{
+  font-family:'Playfair Display',serif;
+  font-size:30px;font-weight:700;color:var(--white);
+  letter-spacing:-1px;line-height:1;
 }
-.tab-btn.active {
-  background: rgba(255,255,255,.08);
-  color: #fff;
-}
-
-/* URL row */
-.url-wrapper {
-  display: flex; gap: 0;
-  border: 1px solid rgba(255,255,255,.12);
-  margin-bottom: 16px;
-  transition: border-color .2s;
-}
-.url-wrapper:focus-within { border-color: rgba(255,255,255,.35); }
-
-.url-in {
-  flex: 1; background: none; border: none;
-  padding: 16px 20px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px; color: #fff; outline: none;
-}
-.url-in::placeholder { color: rgba(255,255,255,.25); }
-
-.url-submit {
-  background: var(--red); border: none;
-  padding: 0 28px;
-  font-family: 'Syne', sans-serif;
-  font-size: 12px; font-weight: 700;
-  letter-spacing: 1px; text-transform: uppercase;
-  color: #fff; cursor: pointer;
-  transition: background .15s, opacity .2s;
-}
-.url-submit:hover { background: #C8221C; }
-.url-submit:disabled { opacity: .4; cursor: not-allowed; }
-
-/* Quick links */
-.quick-row {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  align-items: center; margin-bottom: 16px;
-}
-.ql {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px; color: rgba(255,255,255,.35);
-  background: none; border: 1px solid rgba(255,255,255,.08);
-  padding: 5px 14px; cursor: pointer;
-  transition: all .15s; letter-spacing: .3px;
-}
-.ql:hover { color: rgba(255,255,255,.8); border-color: rgba(255,255,255,.2); }
-.ql-sep { color: rgba(255,255,255,.2); font-size: 9px; letter-spacing: 2px; font-family: 'IBM Plex Mono',monospace; }
-
-.fetch-msg {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px; min-height: 20px;
-  margin-bottom: 8px; letter-spacing: .3px;
-}
-.fetch-msg.ok   { color: var(--green); }
-.fetch-msg.err  { color: var(--red); }
-.fetch-msg.wait { color: rgba(255,255,255,.5); }
-
-/* Paste area */
-.paste-ta {
-  width: 100%; height: 200px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.1);
-  padding: 20px; color: #fff;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12.5px; line-height: 1.7;
-  resize: vertical; outline: none;
-  transition: border-color .2s;
-}
-.paste-ta:focus { border-color: rgba(255,255,255,.3); }
-.paste-ta::placeholder { color: rgba(255,255,255,.2); }
-
-.sample-row {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  margin-top: 14px;
-}
-
-.actions-bar {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-top: 24px; padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,.06);
-}
-
-.char-ct {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px; color: rgba(255,255,255,.3);
-}
-
-.run-analysis {
-  font-family: 'Syne', sans-serif;
-  font-size: 13px; font-weight: 700;
-  letter-spacing: 1.5px; text-transform: uppercase;
-  padding: 14px 40px;
-  background: var(--cream); color: var(--dark);
-  border: none; cursor: pointer;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
-  transition: background .15s, transform .1s;
-}
-.run-analysis:hover { background: #fff; transform: translateY(-2px); }
-.run-analysis:disabled { opacity: .3; cursor: not-allowed; transform: none; }
-
-/* ─── SCANNING ──────────────────────────────────────────────── */
-#scan-overlay {
-  display: none; padding: 80px 0; text-align: center;
-}
-#scan-overlay.on { display: block; }
-
-.scan-ring-wrap {
-  position: relative;
-  width: 80px; height: 80px;
-  margin: 0 auto 24px;
-}
-.scan-ring-svg {
-  animation: spin-ring 1.2s linear infinite;
-  width: 80px; height: 80px;
-}
-@keyframes spin-ring { to { transform: rotate(360deg); } }
-
-.scan-title {
-  font-family: 'Syne', sans-serif;
-  font-size: 14px; font-weight: 600; color: rgba(255,255,255,.7);
-  letter-spacing: 2px; text-transform: uppercase;
-}
-.scan-sub {
-  margin-top: 8px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px; color: rgba(255,255,255,.3);
-  min-height: 16px; letter-spacing: .5px;
-}
-
-/* ─── ERROR ─────────────────────────────────────────────────── */
-.err-block {
-  display: none; margin-top: 20px;
-  padding: 16px 20px;
-  background: rgba(232,50,44,.07);
-  border-left: 2px solid var(--red);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px; color: rgba(232,50,44,.9);
-  line-height: 1.6;
-}
-.err-block.on { display: block; }
-
-/* ─── RESULTS ───────────────────────────────────────────────── */
-#results { display: none; margin-top: 60px; }
-#results.on { display: block; }
-
-/* 3D Score card */
-.score-stage {
-  perspective: 800px;
-  display: flex; gap: 32px;
-  align-items: stretch;
-  margin-bottom: 60px;
-  flex-wrap: wrap;
-}
-
-.score-card-3d {
-  flex: 0 0 220px;
-  border: 1px solid rgba(255,255,255,.1);
-  background: var(--dark2);
-  padding: 40px 28px;
-  text-align: center;
-  transform-style: preserve-3d;
-  transition: transform .4s cubic-bezier(.4,0,.2,1);
-  position: relative;
-  overflow: hidden;
-}
-
-.score-card-3d::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: conic-gradient(var(--score-color, #fff) calc(var(--score-pct, 0) * 1%), transparent 0);
-  opacity: .07;
-  transition: --score-pct .8s;
-}
-
-.score-card-3d:hover { transform: rotateY(-8deg) rotateX(4deg); }
-
-.score-ring {
-  position: relative;
-  width: 100px; height: 100px;
-  margin: 0 auto 16px;
-}
-
-.score-ring svg {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  transform: rotate(-90deg);
-}
-
-.ring-bg { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 3; }
-
-.ring-fill {
-  fill: none; stroke-width: 3;
-  stroke-linecap: round;
-  stroke-dasharray: 282;
-  stroke-dashoffset: 282;
-  transition: stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1), stroke .5s;
-}
-
-.score-val {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Syne', sans-serif;
-  font-size: 32px; font-weight: 800;
-  letter-spacing: -1px; color: #fff;
-}
-
-.score-level-badge {
-  display: inline-block;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase;
-  padding: 4px 12px; border: 1px solid;
-  margin-top: 4px;
-}
-.score-level-badge.H { color: var(--red);   border-color: var(--red);   background: var(--r-h-bg); }
-.score-level-badge.M { color: var(--amber); border-color: var(--amber); background: var(--r-m-bg); }
-.score-level-badge.L { color: var(--green); border-color: var(--green); background: var(--r-l-bg); }
-
-.score-summary-panel {
-  flex: 1; min-width: 260px;
-  border: 1px solid rgba(255,255,255,.07);
-  background: rgba(255,255,255,.02);
-  padding: 32px;
-  display: flex; flex-direction: column; gap: 20px;
-}
-
-.summary-headline {
-  font-family: 'Syne', sans-serif;
-  font-size: 22px; font-weight: 700;
-  color: #fff; line-height: 1.2; letter-spacing: -.5px;
-}
-
-.summary-body {
-  font-family: 'Instrument Serif', serif;
-  font-size: 15px; font-style: italic;
-  color: rgba(255,255,255,.5); line-height: 1.75;
-}
-
-.meta-trio {
-  display: flex; gap: 32px; padding-top: 16px;
-  border-top: 1px solid rgba(255,255,255,.06);
-  flex-wrap: wrap;
-}
-
-.meta-piece { display: flex; flex-direction: column; gap: 4px; }
-.meta-n {
-  font-family: 'Syne', sans-serif;
-  font-size: 28px; font-weight: 800;
-  color: rgba(255,255,255,.9); letter-spacing: -1px;
-}
-.meta-l {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
-  color: rgba(255,255,255,.3);
+.meta-l{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.25);
 }
 
 /* Category grid */
-.cat-eyebrow {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
-  color: rgba(255,255,255,.3); margin-bottom: 16px;
+.cat-label-row{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.2);
+  margin-bottom:16px;
 }
 
-.cat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 48px;
+.cat-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:2px;margin-bottom:56px;
+  border:1px solid rgba(255,255,255,.06);
 }
 
-.cat-tile {
-  background: var(--dark2);
-  border: 1px solid rgba(255,255,255,.06);
-  padding: 20px 18px;
-  transform: translateY(20px); opacity: 0;
-  animation: tileIn .4s forwards;
-  transition: transform .2s, border-color .2s;
-  transform-style: preserve-3d;
-  perspective: 400px;
+.cat-tile{
+  background:rgba(255,255,255,.02);
+  padding:20px 18px;
+  opacity:0;transform:translateY(12px);
+  animation:tileIn .35s forwards;
+  transition:background .2s;
 }
+.cat-tile:hover{background:rgba(255,255,255,.04)}
+@keyframes tileIn{to{opacity:1;transform:translateY(0)}}
 
-@keyframes tileIn {
-  to { transform: translateY(0); opacity: 1; }
+.ct-n{
+  font-family:'Playfair Display',serif;
+  font-size:28px;font-weight:700;color:rgba(255,255,255,.15);
+  float:right;line-height:1;
 }
-
-.cat-tile:hover {
-  transform: translateY(-3px) rotateX(3deg);
-  border-color: rgba(255,255,255,.15);
+.ct-name{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.35);
+  margin-bottom:14px;padding-right:28px;
+  line-height:1.5;clear:both;
 }
-
-.ct-count {
-  font-family: 'Syne', sans-serif;
-  font-size: 28px; font-weight: 800;
-  color: rgba(255,255,255,.2);
-  float: right; line-height: 1;
-  margin-top: -2px;
-}
-
-.ct-name {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px; letter-spacing: .5px; text-transform: uppercase;
-  color: rgba(255,255,255,.4); margin-bottom: 14px;
-  padding-right: 30px; line-height: 1.4;
-  clear: both;
-}
-
-.ct-track { height: 2px; background: rgba(255,255,255,.06); margin-bottom: 10px; overflow: hidden; }
-
-.ct-bar {
-  height: 100%; width: 0;
-  transition: width 1s cubic-bezier(.4,0,.2,1);
-}
-.ct-bar.H { background: var(--red); }
-.ct-bar.M { background: var(--amber); }
-.ct-bar.L { background: var(--green); }
-.ct-bar.N { background: rgba(255,255,255,.1); }
-
-.ct-risk {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
-}
-.ct-risk.H { color: var(--red); }
-.ct-risk.M { color: var(--amber); }
-.ct-risk.L { color: var(--green); }
-.ct-risk.N { color: rgba(255,255,255,.2); }
+.ct-track{height:2px;background:rgba(255,255,255,.05);margin-bottom:8px;overflow:hidden}
+.ct-bar{height:100%;width:0;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.ct-bar.H{background:var(--H)}
+.ct-bar.M{background:var(--M)}
+.ct-bar.L{background:var(--L)}
+.ct-bar.N{background:rgba(255,255,255,.08)}
+.ct-risk{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase}
+.ct-risk.H{color:var(--H)}.ct-risk.M{color:var(--M)}.ct-risk.L{color:var(--L)}.ct-risk.N{color:rgba(255,255,255,.2)}
 
 /* Clause cards */
-.clauses-eyebrow {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
-  color: rgba(255,255,255,.3); margin-bottom: 16px;
+.clauses-label{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.2);margin-bottom:16px;
 }
 
-.clause-stack { display: flex; flex-direction: column; gap: 8px; }
+.clause-stack{display:flex;flex-direction:column;gap:6px}
 
-.clause-card {
-  background: var(--dark2);
-  border: 1px solid rgba(255,255,255,.06);
-  border-left: 2px solid;
-  opacity: 0; transform: translateX(-16px);
-  animation: cardIn .35s forwards;
-  transition: border-color .2s, transform .2s;
-  perspective: 600px; transform-style: preserve-3d;
+.clause-card{
+  background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.06);
+  border-left:2px solid;
+  opacity:0;transform:translateX(-16px);
+  animation:cIn .35s forwards;
+  transition:background .2s;
 }
-.clause-card:hover { transform: translateX(0) translateZ(4px); }
+.clause-card:hover{background:rgba(255,255,255,.04)}
+@keyframes cIn{to{opacity:1;transform:translateX(0)}}
+.clause-card.H{border-left-color:var(--H)}
+.clause-card.M{border-left-color:var(--M)}
+.clause-card.L{border-left-color:var(--L)}
 
-@keyframes cardIn { to { opacity: 1; transform: translateX(0); } }
-
-.clause-card.H { border-left-color: var(--red); }
-.clause-card.M { border-left-color: var(--amber); }
-.clause-card.L { border-left-color: var(--green); }
-
-.cc-head {
-  display: flex; align-items: flex-start;
-  justify-content: space-between;
-  padding: 20px 20px 16px; gap: 16px;
-  cursor: pointer;
+.cc-top{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:18px 20px 14px;gap:14px;
 }
+.cc-left{flex:1}
+.cc-tags{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 
-.cc-left { flex: 1; }
-
-.cc-tags {
-  display: flex; align-items: center; gap: 8px;
-  flex-wrap: wrap; margin-bottom: 10px;
+.badge{
+  font-family:'DM Mono',monospace;font-size:8px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  padding:3px 8px;border:1px solid;
 }
+.badge.H{color:var(--H);border-color:var(--H);background:var(--hbg)}
+.badge.M{color:var(--M);border-color:var(--M);background:var(--mbg)}
+.badge.L{color:var(--L);border-color:var(--L);background:var(--lbg)}
 
-.badge {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
-  padding: 3px 8px; border: 1px solid;
-}
-.badge.H { color: var(--red);   border-color: var(--red);   background: var(--r-h-bg); }
-.badge.M { color: var(--amber); border-color: var(--amber); background: var(--r-m-bg); }
-.badge.L { color: var(--green); border-color: var(--green); background: var(--r-l-bg); }
+.badge-cat{font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,.3)}
+.badge-num{font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,.15)}
 
-.badge-cat {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; color: rgba(255,255,255,.3);
+.cc-text{
+  font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:300;
+  color:rgba(255,255,255,.7);line-height:1.65;
+  font-style:italic;
 }
 
-.badge-num {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; color: rgba(255,255,255,.15);
+.cc-toggle{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:1px;text-transform:uppercase;
+  color:rgba(255,255,255,.25);background:none;
+  border:1px solid rgba(255,255,255,.08);
+  padding:4px 12px;
+  transition:all .15s;align-self:flex-start;flex-shrink:0;margin-top:2px;
+}
+.cc-toggle:hover{color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)}
+
+.cc-kws{padding:0 20px 14px;display:flex;flex-wrap:wrap;gap:6px}
+.kw-pill{
+  font-family:'DM Mono',monospace;font-size:9px;
+  color:rgba(201,150,12,.7);
+  background:rgba(201,150,12,.06);
+  border:1px solid rgba(201,150,12,.15);
+  padding:2px 8px;
 }
 
-.cc-excerpt {
-  font-family: 'Instrument Serif', serif;
-  font-size: 14.5px; color: rgba(255,255,255,.75);
-  line-height: 1.65; font-style: italic;
+.cc-raw{
+  display:none;
+  margin:0 20px 20px;padding:16px;
+  background:rgba(0,0,0,.3);
+  border-left:1px solid rgba(255,255,255,.05);
+  font-family:'DM Mono',monospace;font-size:11.5px;
+  color:rgba(255,255,255,.35);line-height:1.75;
+}
+.cc-raw.open{display:block}
+
+/* ── ABOUT SECTION ───────────────────────────────────────── */
+#about{
+  background:var(--off);
+  padding:140px 60px;
+  position:relative;
+}
+#about::before{
+  content:'';position:absolute;
+  top:-1px;left:0;right:0;height:80px;
+  background:var(--black);
+  clip-path:polygon(0 0,100% 0,100% 80px,0 1px);
 }
 
-.cc-toggle {
-  flex-shrink: 0;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; letter-spacing: 1px;
-  text-transform: uppercase; color: rgba(255,255,255,.25);
-  background: none;
-  border: 1px solid rgba(255,255,255,.08);
-  padding: 4px 12px; cursor: pointer;
-  transition: all .15s; align-self: flex-start;
-  margin-top: 2px;
+.about-inner{
+  max-width:1200px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 1fr;gap:100px;
+  align-items:center;
+  padding-top:60px;
 }
-.cc-toggle:hover { color: rgba(255,255,255,.6); border-color: rgba(255,255,255,.2); }
+@media(max-width:800px){.about-inner{grid-template-columns:1fr;gap:60px}}
 
-.cc-kws {
-  padding: 0 20px 14px;
-  display: flex; flex-wrap: wrap; gap: 6px;
+.about-h2{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(36px,4vw,56px);
+  font-weight:900;
+  color:var(--black);line-height:1.05;
+  letter-spacing:-2px;margin-bottom:24px;
 }
+.about-h2 em{font-style:italic;color:var(--red)}
 
-.kw-tag {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px; color: rgba(255,200,100,.6);
-  background: rgba(255,200,100,.06);
-  border: 1px solid rgba(255,200,100,.12);
-  padding: 2px 8px;
+.about-body{
+  font-family:'DM Sans',sans-serif;
+  font-size:16px;font-weight:300;
+  color:var(--grey);line-height:1.8;
+  margin-bottom:32px;
 }
 
-.cc-raw {
-  display: none;
-  margin: 0 20px 20px; padding: 16px;
-  background: rgba(0,0,0,.3);
-  border-left: 1px solid rgba(255,255,255,.06);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11.5px; color: rgba(255,255,255,.4);
-  line-height: 1.75;
+.about-link{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:'DM Mono',monospace;font-size:11px;
+  letter-spacing:2px;text-transform:uppercase;
+  color:var(--black);text-decoration:none;
+  padding-bottom:4px;border-bottom:1px solid var(--black);
+  transition:color .2s,border-color .2s;
 }
-.cc-raw.open { display: block; }
+.about-link:hover{color:var(--red);border-color:var(--red)}
 
-/* ─── ABOUT STRIP ───────────────────────────────────────────── */
-.about-strip {
-  background: var(--bg2);
-  padding: 80px 48px;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 80px;
-  align-items: center;
+/* Risk list */
+.risk-list-items{display:flex;flex-direction:column}
+.risk-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 0;
+  border-bottom:1px solid var(--lgrey);
+  font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:400;color:var(--black);
+  opacity:0;transform:translateX(20px);
+  transition:opacity .5s,transform .5s;
 }
-@media (max-width: 700px) { .about-strip { grid-template-columns: 1fr; gap: 40px; } }
-
-.about-heading {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(28px, 3.5vw, 44px);
-  font-weight: 800; letter-spacing: -1.5px;
-  line-height: 1.1; color: var(--text);
-}
-.about-heading em { font-style: italic; color: var(--red); }
-
-.about-body {
-  font-family: 'Instrument Serif', serif;
-  font-size: 16px; font-style: italic;
-  color: var(--muted); line-height: 1.8;
+.risk-item.visible{opacity:1;transform:translateX(0)}
+.risk-wt{
+  font-family:'DM Mono',monospace;
+  font-size:11px;color:var(--grey);
 }
 
-.risk-list { display: flex; flex-direction: column; gap: 0; }
+/* ── FOOTER ──────────────────────────────────────────────── */
+footer{
+  background:var(--black);
+  padding:48px 60px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-top:1px solid rgba(255,255,255,.05);
+  flex-wrap:wrap;gap:20px;
+}
+.footer-brand{
+  font-family:'Playfair Display',serif;
+  font-size:15px;font-weight:700;color:rgba(255,255,255,.35);
+}
+.footer-brand em{color:var(--red);font-style:normal}
+.footer-links{display:flex;gap:24px}
+.footer-links a{
+  font-family:'DM Mono',monospace;font-size:10px;
+  letter-spacing:1px;color:rgba(255,255,255,.25);
+  text-decoration:none;transition:color .2s;
+}
+.footer-links a:hover{color:rgba(255,255,255,.7)}
 
-.risk-row {
-  display: flex; align-items: center;
-  justify-content: space-between;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
-  font-family: 'Syne', sans-serif;
-  font-size: 13px; font-weight: 500;
-  color: var(--text);
-  transform: translateX(-20px); opacity: 0;
-  transition: transform .5s, opacity .5s;
+@media(max-width:768px){
+  nav,#analyzer,#about,footer{padding-left:24px;padding-right:24px}
+  .hero-h1{letter-spacing:-1.5px}
+  .stats-strip{padding:60px 24px}
 }
-.risk-row.visible { transform: translateX(0); opacity: 1; }
-
-.risk-row-weight {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px; color: var(--muted);
-}
-
-/* ─── FOOTER ────────────────────────────────────────────────── */
-footer {
-  background: var(--dark);
-  padding: 32px 48px;
-  display: flex; align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid rgba(255,255,255,.04);
-  flex-wrap: wrap; gap: 16px;
-}
-
-.footer-logo {
-  font-family: 'Syne', sans-serif;
-  font-size: 14px; font-weight: 700;
-  color: rgba(255,255,255,.4);
-}
-
-.footer-links {
-  display: flex; gap: 24px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px; letter-spacing: 1px;
-}
-.footer-links a {
-  color: rgba(255,255,255,.3); text-decoration: none;
-  transition: color .2s;
-}
-.footer-links a:hover { color: rgba(255,255,255,.7); }
 </style>
 </head>
 <body>
 
-<!-- Custom cursor -->
-<div id="cursor"></div>
-<div id="cursor-ring"></div>
+<div id="cur"></div>
+<div id="cur2"></div>
 
 <!-- NAV -->
 <nav id="nav">
   <a class="nav-logo" href="#">
-    <svg class="logo-svg" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M16 1L30 8.5V22C30 29.5 16 35 16 35C16 35 2 29.5 2 22V8.5L16 1Z" fill="#0A0A08" stroke="#E8322C" stroke-width="1.2"/>
-      <path d="M16 5L27 11V21C27 26.5 16 32 16 32C16 32 5 26.5 5 21V11L16 5Z" fill="none" stroke="#E8322C" stroke-width=".3" stroke-opacity=".3"/>
-      <path d="M19.5 13C17.8 11.9 15.2 12.2 13.7 13.9C12.2 15.6 12.2 18.4 13.7 20.1C15.2 21.8 17.8 22.1 19.5 21" stroke="#E8322C" stroke-width="1.8" stroke-linecap="round"/>
-      <line x1="19.5" y1="17.5" x2="16" y2="17.5" stroke="#E8322C" stroke-width="1.6" stroke-linecap="round"/>
-      <circle cx="16" cy="27" r="1.2" fill="#E8322C" opacity=".5"/>
+    <svg viewBox="0 0 34 38" fill="none">
+      <path d="M17 1L32 9V22C32 30 17 37 17 37C17 37 2 30 2 22V9L17 1Z" fill="#0A0A0A" stroke="#D93025" stroke-width="1.2"/>
+      <path d="M17 5.5L28 12V21C28 27 17 33 17 33C17 33 6 27 6 21V12L17 5.5Z" fill="none" stroke="#D93025" stroke-width=".3" stroke-opacity=".3"/>
+      <path d="M20.5 13.5C18.8 12.4 16.2 12.7 14.5 14.4C12.8 16.1 12.8 19 14.5 20.7C16.2 22.4 18.8 22.7 20.5 21.5" stroke="#D93025" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="20.5" y1="17.5" x2="17" y2="17.5" stroke="#D93025" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="17" cy="28.5" r="1.2" fill="#D93025" opacity=".5"/>
     </svg>
-    <span class="nav-name">Clause<span>Guard</span></span>
+    <span class="nav-wordmark">Clause<em>Guard</em></span>
   </a>
-  <div class="nav-status">
-    <div class="dot-live"></div>
-    Live · SFU Capstone 2026
-  </div>
+  <div class="nav-tag">Legal Risk Intelligence</div>
 </nav>
 
 <!-- HERO -->
-<section class="hero" id="hero-section">
-  <div class="hero-content">
-    <div class="hero-kicker reveal">Legal Risk Intelligence</div>
-    <h1 class="reveal reveal-delay-1">
-      Read the<br/>
-      <span class="word-red">fine print</span><br/>
-      <span class="word-outline">for you.</span>
-    </h1>
-    <p class="hero-body reveal reveal-delay-2">
-      Every ToS agreement hides clauses that sell your data, waive your rights, and lock you into binding arbitration. ClauseGuard surfaces them before you click "I Agree."
-    </p>
-    <div class="hero-cta-row reveal reveal-delay-3">
-      <button class="cta-main" onclick="scrollToAnalyzer()">Analyze a Document</button>
-      <span class="cta-sub">No install required</span>
+<section id="hero">
+  <canvas id="hero-canvas"></canvas>
+
+  <div class="hero-inner">
+    <div class="hero-eyebrow reveal">
+      <span class="eyebrow-line"></span>
+      SFU Capstone 2026
+      <span class="eyebrow-line"></span>
     </div>
+    <h1 class="hero-h1 reveal reveal-delay-1">
+      The terms<br/>
+      you <em>never</em><br/>
+      <span class="outline">read.</span>
+    </h1>
+    <p class="hero-sub reveal reveal-delay-2">
+      ClauseGuard analyzes Terms of Service and Privacy Policies in seconds — surfacing the clauses designed to be invisible.
+    </p>
+    <button class="hero-cta reveal reveal-delay-3" onclick="document.getElementById('analyzer').scrollIntoView({behavior:'smooth'})">
+      Analyze a Document
+      <svg viewBox="0 0 14 14" fill="none"><path d="M1 7h12M8 2l6 5-6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
   </div>
 
-  <div class="hero-visual">
-    <canvas id="three-canvas"></canvas>
-    <span class="crystal-label">Risk Geometry</span>
+  <div class="hero-scroll">
+    <div class="hero-scroll-line"></div>
+    Scroll
   </div>
 </section>
 
-<!-- STATS STRIP -->
-<div class="stats-strip">
-  <div class="stat-item reveal">
-    <div class="stat-num">7<span>57</span></div>
-    <div class="stat-lbl">Classifier Rules</div>
-  </div>
-  <div class="stat-item reveal reveal-delay-1">
-    <div class="stat-num">2<span>14</span></div>
-    <div class="stat-lbl">Labeled Clauses</div>
-  </div>
-  <div class="stat-item reveal reveal-delay-2">
-    <div class="stat-num">1<span>2</span></div>
-    <div class="stat-lbl">Real Documents</div>
-  </div>
-  <div class="stat-item reveal reveal-delay-3">
-    <div class="stat-num">7</div>
-    <div class="stat-lbl">Risk Categories</div>
+<!-- STATS -->
+<div class="stats-strip reveal">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <div class="stat-n">757</div>
+      <div class="stat-l">Classifier<br/>Rules</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">214</div>
+      <div class="stat-l">Human-Labeled<br/>Clauses</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">12</div>
+      <div class="stat-l">Real ToS<br/>Documents</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-n">7</div>
+      <div class="stat-l">Risk<br/>Categories</div>
+    </div>
   </div>
 </div>
 
 <!-- ANALYZER -->
 <section id="analyzer">
-  <div class="section-eyebrow" style="color:rgba(255,255,255,.3)">
-    Document Analysis
-    <span style="flex:1; height:1px; background:rgba(255,255,255,.07); max-width:80px; display:block;"></span>
-  </div>
+  <div class="analyzer-grid">
+    <div>
+      <div class="section-eyebrow reveal">Document Analysis</div>
+      <h2 class="input-heading reveal reveal-delay-1">
+        Submit any<br/><em>Terms of Service</em><br/>for analysis.
+      </h2>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('url',this)">URL</button>
-    <button class="tab-btn" onclick="switchTab('paste',this)">Paste Text</button>
-  </div>
-
-  <!-- URL panel -->
-  <div id="panel-url">
-    <div class="url-wrapper">
-      <input type="url" class="url-in" id="url-in" placeholder="https://discord.com/privacy"
-             onkeydown="if(event.key==='Enter')fetchGo()"/>
-      <button class="url-submit" id="url-btn" onclick="fetchGo()">Fetch →</button>
-    </div>
-    <div class="quick-row">
-      <span class="ql-sep">Quick →</span>
-      <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
-      <button class="ql" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify</button>
-      <button class="ql" onclick="setUrl('https://policies.google.com/terms')">Google</button>
-      <button class="ql" onclick="setUrl('https://www.reddit.com/policies/privacy-policy')">Reddit</button>
-      <button class="ql" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn</button>
-      <button class="ql" onclick="setUrl('https://www.microsoft.com/en-ca/servicesagreement')">Microsoft</button>
-    </div>
-    <div class="fetch-msg" id="fetch-msg"></div>
-  </div>
-
-  <!-- Paste panel -->
-  <div id="panel-paste" style="display:none">
-    <textarea class="paste-ta" id="paste-ta"
-      placeholder="Paste the full Terms of Service or Privacy Policy text here…&#10;&#10;Or load a sample using the buttons below."></textarea>
-    <div class="sample-row">
-      <span class="ql-sep">Samples →</span>
-      <button class="ql" onclick="loadSample('arb')">Arbitration</button>
-      <button class="ql" onclick="loadSample('data')">Data Selling</button>
-      <button class="ql" onclick="loadSample('ip')">Content License</button>
-      <button class="ql" onclick="loadSample('liab')">Liability Cap</button>
-      <button class="ql" onclick="loadSample('full')">Full Sample</button>
-    </div>
-  </div>
-
-  <div class="actions-bar">
-    <span class="char-ct" id="char-ct">—</span>
-    <button class="run-analysis" id="run-btn" onclick="analyze()">Run Analysis</button>
-  </div>
-
-  <!-- Scanning -->
-  <div id="scan-overlay">
-    <div class="scan-ring-wrap">
-      <svg class="scan-ring-svg" viewBox="0 0 80 80">
-        <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
-        <circle cx="40" cy="40" r="34" fill="none" stroke="#E8322C" stroke-width="2"
-                stroke-dasharray="50 163" stroke-linecap="round" transform="rotate(-90 40 40)"/>
-      </svg>
-    </div>
-    <div class="scan-title">Analyzing</div>
-    <div class="scan-sub" id="scan-sub-txt"></div>
-  </div>
-
-  <div class="err-block" id="err-block"></div>
-
-  <!-- Results -->
-  <div id="results">
-    <div class="score-stage">
-      <div class="score-card-3d">
-        <div class="score-ring">
-          <svg viewBox="0 0 100 100">
-            <circle class="ring-bg" cx="50" cy="50" r="44"/>
-            <circle class="ring-fill" id="ring-fill" cx="50" cy="50" r="44"/>
-          </svg>
-          <div class="score-val" id="score-val">0</div>
-        </div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:8px;">Risk Score</div>
-        <div class="score-level-badge" id="score-badge">—</div>
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('url',this)">URL</button>
+        <button class="tab-btn" onclick="switchTab('paste',this)">Paste Text</button>
       </div>
 
-      <div class="score-summary-panel">
-        <div class="summary-headline" id="sum-head">Assessment complete.</div>
-        <div class="summary-body" id="sum-body">—</div>
-        <div class="meta-trio">
-          <div class="meta-piece">
-            <span class="meta-n" id="m-total">—</span>
-            <span class="meta-l">Clauses</span>
+      <!-- URL panel -->
+      <div id="panel-url">
+        <div class="url-row">
+          <input type="url" class="url-in" id="url-in" placeholder="https://discord.com/privacy" onkeydown="if(event.key==='Enter')fetchGo()"/>
+          <button class="url-go" id="url-btn" onclick="fetchGo()">Fetch →</button>
+        </div>
+        <div class="quick-row">
+          <span class="ql-sep">Try →</span>
+          <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
+          <button class="ql" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify</button>
+          <button class="ql" onclick="setUrl('https://policies.google.com/terms')">Google</button>
+          <button class="ql" onclick="setUrl('https://www.reddit.com/policies/privacy-policy')">Reddit</button>
+          <button class="ql" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn</button>
+          <button class="ql" onclick="setUrl('https://www.microsoft.com/en-ca/servicesagreement')">Microsoft</button>
+        </div>
+        <div class="fetch-msg" id="fetch-msg"></div>
+      </div>
+
+      <!-- Paste panel -->
+      <div id="panel-paste" style="display:none">
+        <textarea class="paste-ta" id="paste-ta" placeholder="Paste the full Terms of Service or Privacy Policy text here…"></textarea>
+        <div class="sample-row">
+          <span class="ql-sep">Samples →</span>
+          <button class="ql" onclick="loadSample('arb')">Arbitration</button>
+          <button class="ql" onclick="loadSample('data')">Data Selling</button>
+          <button class="ql" onclick="loadSample('ip')">IP License</button>
+          <button class="ql" onclick="loadSample('liab')">Liability Cap</button>
+          <button class="ql" onclick="loadSample('full')">Full Sample</button>
+        </div>
+      </div>
+
+      <div class="input-bottom">
+        <span class="char-ct" id="char-ct">—</span>
+        <button class="run-btn" id="run-btn" onclick="analyze()">Run Analysis</button>
+      </div>
+
+      <!-- Scanning -->
+      <div id="scan-wrap">
+        <div class="scan-orb"></div>
+        <div class="scan-title">Analyzing Document</div>
+        <div class="scan-sub" id="scan-sub"></div>
+      </div>
+
+      <div id="err-block"></div>
+
+      <!-- Results -->
+      <div id="results">
+        <!-- Score header -->
+        <div class="result-header">
+          <div class="score-panel">
+            <div class="score-eyebrow">Risk Score</div>
+            <div class="ring-wrap">
+              <svg viewBox="0 0 120 120">
+                <circle class="ring-bg" cx="60" cy="60" r="54"/>
+                <circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="54"/>
+              </svg>
+              <div class="ring-num" id="ring-num">0</div>
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.2);margin-bottom:8px">out of 100</div>
+            <div class="score-badge" id="score-badge">—</div>
           </div>
-          <div class="meta-piece">
-            <span class="meta-n" id="m-flagged">—</span>
-            <span class="meta-l">Risks</span>
-          </div>
-          <div class="meta-piece">
-            <span class="meta-n" id="m-ms">—</span>
-            <span class="meta-l">ms</span>
+          <div class="result-summary">
+            <div class="result-verdict" id="result-verdict">Assessment complete.</div>
+            <div class="result-body" id="result-body">—</div>
+            <div class="result-meta">
+              <div class="meta-item"><span class="meta-n" id="m-total">—</span><span class="meta-l">Clauses</span></div>
+              <div class="meta-item"><span class="meta-n" id="m-flagged">—</span><span class="meta-l">Risks Found</span></div>
+              <div class="meta-item"><span class="meta-n" id="m-ms">—</span><span class="meta-l">ms</span></div>
+            </div>
           </div>
         </div>
+
+        <!-- Categories -->
+        <div class="cat-label-row">Category Breakdown</div>
+        <div class="cat-grid" id="cat-grid"></div>
+
+        <!-- Clauses -->
+        <div class="clauses-label" id="clauses-lbl">Flagged Clauses</div>
+        <div class="clause-stack" id="clause-stack"></div>
       </div>
     </div>
 
-    <div class="cat-eyebrow">Category Breakdown</div>
-    <div class="cat-grid" id="cat-grid"></div>
-
-    <div class="clauses-eyebrow" id="clauses-eye">Flagged Clauses</div>
-    <div class="clause-stack" id="clause-stack"></div>
+    <!-- Sidebar -->
+    <div class="analyzer-sidebar reveal reveal-delay-2">
+    
+      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.2);text-align:center;margin-bottom:24px;">Risk Geometry — Reacts to Analysis</div>
+      <div class="sidebar-card">
+        <div class="sidebar-title">Risk Categories</div>
+        <div class="risk-row"><span>Data Sharing</span><span class="risk-wt">22%</span></div>
+        <div class="risk-row"><span>Tracking &amp; Profiling</span><span class="risk-wt">20%</span></div>
+        <div class="risk-row"><span>Third-Party Access</span><span class="risk-wt">13%</span></div>
+        <div class="risk-row"><span>Data Retention</span><span class="risk-wt">13%</span></div>
+        <div class="risk-row"><span>Arbitration</span><span class="risk-wt">13%</span></div>
+        <div class="risk-row"><span>Content &amp; IP Rights</span><span class="risk-wt">10%</span></div>
+        <div class="risk-row"><span>Liability Limitation</span><span class="risk-wt">9%</span></div>
+      </div>
+      <div class="sidebar-card">
+        <div class="sidebar-title">How It Works</div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:300;color:rgba(255,255,255,.45);line-height:1.8;">
+          The document is segmented into legal clauses using spaCy, then classified against 757 rules across 7 risk categories with negation detection. A weighted score from 0–100 is returned in milliseconds.
+        </div>
+      <div id="model-scene"><canvas id="model-canvas"></canvas></div>
+      </div>
+    </div>
   </div>
 </section>
 
-<!-- ABOUT STRIP -->
-<div class="about-strip">
-  <div>
-    <div class="section-eyebrow reveal" style="margin-bottom:20px;">About ClauseGuard</div>
-    <h2 class="about-heading reveal reveal-delay-1">
-      The legal language<br/>
-      you're <em>never</em> meant<br/>
-      to understand.
-    </h2>
-    <p class="about-body reveal reveal-delay-2" style="margin-top:24px;">
-      Built as a capstone security research project at Simon Fraser University. ClauseGuard treats legal document analysis as a defensive security problem — surfacing the risk language that platforms count on users never reading.
-    </p>
-  </div>
-  <div>
-    <div class="risk-list" id="risk-list">
-      <div class="risk-row"><span>Data Sharing</span><span class="risk-row-weight">22%</span></div>
-      <div class="risk-row"><span>Tracking & Profiling</span><span class="risk-row-weight">20%</span></div>
-      <div class="risk-row"><span>Third-Party Access</span><span class="risk-row-weight">13%</span></div>
-      <div class="risk-row"><span>Data Retention</span><span class="risk-row-weight">13%</span></div>
-      <div class="risk-row"><span>Arbitration</span><span class="risk-row-weight">13%</span></div>
-      <div class="risk-row"><span>Content & IP Rights</span><span class="risk-row-weight">10%</span></div>
-      <div class="risk-row"><span>Liability Limitation</span><span class="risk-row-weight">9%</span></div>
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-inner">
+    <div>
+      <p class="about-body reveal" style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--grey);margin-bottom:20px;">About the Project</p>
+      <h2 class="about-h2 reveal reveal-delay-1">
+        Legal language<br/>
+        you're <em>never meant</em><br/>
+        to understand.
+      </h2>
+      <p class="about-body reveal reveal-delay-2">
+        Built as a capstone security research project at Simon Fraser University. ClauseGuard treats legal document analysis as a defensive security problem — surfacing the risk language that platforms count on users never reading.
+      </p>
+      <a class="about-link reveal reveal-delay-3" href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">
+        View on GitHub
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 11L11 1M11 1H4M11 1v7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </a>
+    </div>
+    <div>
+      <div class="risk-list-items" id="risk-list">
+        <div class="risk-item"><span>Data Sharing</span><span class="risk-wt">22%</span></div>
+        <div class="risk-item"><span>Tracking &amp; Profiling</span><span class="risk-wt">20%</span></div>
+        <div class="risk-item"><span>Third-Party Access</span><span class="risk-wt">13%</span></div>
+        <div class="risk-item"><span>Data Retention</span><span class="risk-wt">13%</span></div>
+        <div class="risk-item"><span>Arbitration</span><span class="risk-wt">13%</span></div>
+        <div class="risk-item"><span>Content &amp; IP Rights</span><span class="risk-wt">10%</span></div>
+        <div class="risk-item"><span>Liability Limitation</span><span class="risk-wt">9%</span></div>
+      </div>
     </div>
   </div>
-</div>
+</section>
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">ClauseGuard &nbsp;/&nbsp; SFU 2026</div>
+  <div class="footer-brand">Clause<em>Guard</em> &nbsp;/&nbsp; SFU 2026 &nbsp;/&nbsp; Tanish Rathore</div>
   <div class="footer-links">
     <a href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">GitHub</a>
     <a href="https://clauseguard-production-183f.up.railway.app/health" target="_blank">API Status</a>
@@ -999,450 +900,421 @@ footer {
   </div>
 </footer>
 
-<!-- THREE.JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* ═══════════════════════════════════════════════════════════
-   THREE.JS — 3D Crystal in hero
-═══════════════════════════════════════════════════════════ */
-(function() {
-  const canvas = document.getElementById('three-canvas');
-  const parent = canvas.parentElement;
+/* ═══════════════════════════════════════════════════════
+   CURSOR
+═══════════════════════════════════════════════════════ */
+const cur=document.getElementById('cur'),cur2=document.getElementById('cur2');
+let cx=0,cy=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{cx=e.clientX;cy=e.clientY});
+(function loop(){requestAnimationFrame(loop);rx+=(cx-rx)*.12;ry+=(cy-ry)*.12;cur.style.cssText+=`;left:${cx}px;top:${cy}px`;cur2.style.cssText+=`;left:${rx}px;top:${ry}px`})();
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x000000, 0);
+/* ═══════════════════════════════════════════════════════
+   NAV SCROLL STATE
+═══════════════════════════════════════════════════════ */
+const nav=document.getElementById('nav');
+window.addEventListener('scroll',()=>{
+  const y=window.scrollY;
+  const inAbout=document.getElementById('about').getBoundingClientRect().top<=68;
+  nav.classList.toggle('solid',y>60&&!inAbout);
+  nav.classList.toggle('light-nav',inAbout);
+  nav.classList.toggle('nav-light',inAbout);
+});
 
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.z = 5;
+/* ═══════════════════════════════════════════════════════
+   THREE.JS — HERO NEURAL NETWORK BACKGROUND
+═══════════════════════════════════════════════════════ */
+(function(){
+  const canvas=document.getElementById('hero-canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setClearColor(0x000000,0);
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(60,1,0.1,100);
+  camera.position.z=28;
 
-  // Icosahedron — solid + wireframe
-  const geo = new THREE.IcosahedronGeometry(1.6, 1);
-
-  const solidMat = new THREE.MeshPhongMaterial({
-    color: 0x111520,
-    emissive: 0x0A0F1A,
-    specular: 0x334466,
-    shininess: 80,
-    transparent: true,
-    opacity: 0.85,
-  });
-  const solid = new THREE.Mesh(geo, solidMat);
-  scene.add(solid);
-
-  const wireMat = new THREE.MeshBasicMaterial({
-    color: 0x4466AA,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.25,
-  });
-  const wire = new THREE.Mesh(geo, wireMat);
-  scene.add(wire);
-
-  // Outer glow ring
-  const ringGeo = new THREE.TorusGeometry(2.1, 0.006, 8, 80);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x3355AA, transparent: true, opacity: 0.3 });
-  const ring1 = new THREE.Mesh(ringGeo, ringMat);
-  ring1.rotation.x = Math.PI / 2.5;
-  scene.add(ring1);
-
-  const ring2 = new THREE.Mesh(
-    new THREE.TorusGeometry(2.4, 0.004, 8, 80),
-    new THREE.MeshBasicMaterial({ color: 0x223366, transparent: true, opacity: 0.2 })
-  );
-  ring2.rotation.x = Math.PI / 1.6;
-  ring2.rotation.z = Math.PI / 4;
-  scene.add(ring2);
-
-  // Floating particles
-  const partCount = 60;
-  const positions = new Float32Array(partCount * 3);
-  for (let i = 0; i < partCount * 3; i++) {
-    positions[i] = (Math.random() - 0.5) * 7;
-  }
-  const partGeo = new THREE.BufferGeometry();
-  partGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const partMat = new THREE.PointsMaterial({
-    color: 0x4466BB, size: 0.04, transparent: true, opacity: 0.6
-  });
-  const particles = new THREE.Points(partGeo, partMat);
-  scene.add(particles);
-
-  // Lights
-  const ambLight = new THREE.AmbientLight(0x112244, 2);
-  scene.add(ambLight);
-
-  const dirLight = new THREE.DirectionalLight(0x4488FF, 1.5);
-  dirLight.position.set(2, 3, 4);
-  scene.add(dirLight);
-
-  const redLight = new THREE.PointLight(0xE8322C, 0.8, 8);
-  redLight.position.set(-3, -2, 2);
-  scene.add(redLight);
-
-  // Mouse parallax
-  let mouseX = 0, mouseY = 0;
-  document.addEventListener('mousemove', e => {
-    mouseX = (e.clientX / window.innerWidth  - .5) * 2;
-    mouseY = (e.clientY / window.innerHeight - .5) * 2;
-  });
-
-  let riskColor = new THREE.Color(0x4466AA);
-  let riskSpeed = 1;
-
-  // Expose to window so we can update from results
-  window.setCrystalRisk = function(level) {
-    if      (level === 'HIGH')   { riskColor.set(0xE8322C); riskSpeed = 2.2; }
-    else if (level === 'MEDIUM') { riskColor.set(0xE8890A); riskSpeed = 1.5; }
-    else                         { riskColor.set(0x1A9E52); riskSpeed = 0.7; }
-    wireMat.color = riskColor;
-    ringMat.color = riskColor;
-  };
-
-  // Resize
-  function resize() {
-    const w = parent.clientWidth;
-    const h = parent.clientHeight || 500;
-    renderer.setSize(w, h);
-    camera.aspect = w / h;
+  function resize(){
+    const w=canvas.parentElement.clientWidth,h=canvas.parentElement.clientHeight||window.innerHeight;
+    renderer.setSize(w,h);
+    camera.aspect=w/h;
     camera.updateProjectionMatrix();
   }
   resize();
-  window.addEventListener('resize', resize);
+  window.addEventListener('resize',resize);
 
-  // Animate
-  let t = 0;
-  function animate() {
+  // Create particle nodes
+  const N=180;
+  const positions=[];
+  for(let i=0;i<N;i++){
+    positions.push({
+      x:(Math.random()-.5)*40,
+      y:(Math.random()-.5)*24,
+      z:(Math.random()-.5)*20,
+      vx:(Math.random()-.5)*.006,
+      vy:(Math.random()-.5)*.006,
+      vz:(Math.random()-.5)*.003,
+    });
+  }
+
+  // Points geometry
+  const ptGeo=new THREE.BufferGeometry();
+  const ptPos=new Float32Array(N*3);
+  ptGeo.setAttribute('position',new THREE.BufferAttribute(ptPos,3));
+  const ptMat=new THREE.PointsMaterial({color:0x444444,size:0.12,transparent:true,opacity:.7});
+  scene.add(new THREE.Points(ptGeo,ptMat));
+
+  // Lines
+  const maxLines=300;
+  const lineGeo=new THREE.BufferGeometry();
+  const linePos=new Float32Array(maxLines*6);
+  lineGeo.setAttribute('position',new THREE.BufferAttribute(linePos,3));
+  lineGeo.setDrawRange(0,0);
+  const lineMat=new THREE.LineSegments(lineGeo,new THREE.LineBasicMaterial({color:0x222222,transparent:true,opacity:.5}));
+  scene.add(lineMat);
+
+  // Axis-aligned subtle fog
+  scene.fog=new THREE.FogExp2(0x000000,0.012);
+
+  let t=0,mx=0,my=0;
+  document.addEventListener('mousemove',e=>{mx=(e.clientX/window.innerWidth-.5)*2;my=(e.clientY/window.innerHeight-.5)*2});
+
+  function animate(){
     requestAnimationFrame(animate);
-    t += 0.006 * riskSpeed;
+    t+=0.004;
 
-    solid.rotation.x = t * 0.4 + mouseY * 0.15;
-    solid.rotation.y = t * 0.6 + mouseX * 0.15;
-    wire.rotation.x  = solid.rotation.x;
-    wire.rotation.y  = solid.rotation.y;
+    // Move particles
+    for(let i=0;i<N;i++){
+      const p=positions[i];
+      p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
+      if(Math.abs(p.x)>20)p.vx*=-1;
+      if(Math.abs(p.y)>12)p.vy*=-1;
+      if(Math.abs(p.z)>10)p.vz*=-1;
+      ptPos[i*3]=p.x;ptPos[i*3+1]=p.y;ptPos[i*3+2]=p.z;
+    }
+    ptGeo.attributes.position.needsUpdate=true;
 
-    ring1.rotation.z = t * 0.3;
-    ring2.rotation.z = -t * 0.2;
+    // Connect nearby nodes
+    let lc=0;
+    const DIST=8;
+    for(let i=0;i<N&&lc<maxLines;i++){
+      for(let j=i+1;j<N&&lc<maxLines;j++){
+        const dx=positions[i].x-positions[j].x;
+        const dy=positions[i].y-positions[j].y;
+        const dz=positions[i].z-positions[j].z;
+        const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
+        if(d<DIST){
+          linePos[lc*6]=positions[i].x;linePos[lc*6+1]=positions[i].y;linePos[lc*6+2]=positions[i].z;
+          linePos[lc*6+3]=positions[j].x;linePos[lc*6+4]=positions[j].y;linePos[lc*6+5]=positions[j].z;
+          lc++;
+        }
+      }
+    }
+    lineGeo.attributes.position.needsUpdate=true;
+    lineGeo.setDrawRange(0,lc*2);
 
-    particles.rotation.y = t * 0.05;
-    particles.rotation.x = t * 0.03;
-
-    // Pulse red light
-    redLight.intensity = 0.5 + Math.sin(t * 3) * 0.3;
-
-    renderer.render(scene, camera);
+    // Camera drift + mouse parallax
+    camera.position.x=Math.sin(t*.15)*3+mx*1.5;
+    camera.position.y=Math.cos(t*.12)*1.5-my*1.5;
+    camera.lookAt(0,0,0);
+    renderer.render(scene,camera);
   }
   animate();
 })();
 
-/* ═══════════════════════════════════════════════════════════
-   CURSOR
-═══════════════════════════════════════════════════════════ */
-const cur  = document.getElementById('cursor');
-const curR = document.getElementById('cursor-ring');
-let cx = 0, cy = 0, rx = 0, ry = 0;
-document.addEventListener('mousemove', e => { cx = e.clientX; cy = e.clientY; });
-(function cursorLoop() {
-  requestAnimationFrame(cursorLoop);
-  rx += (cx - rx) * 0.12;
-  ry += (cy - ry) * 0.12;
-  cur.style.left  = cx + 'px';  cur.style.top  = cy + 'px';
-  curR.style.left = rx + 'px'; curR.style.top = ry + 'px';
+/* ═══════════════════════════════════════════════════════
+   THREE.JS — FLOATING 3D MODEL (icosahedron)
+═══════════════════════════════════════════════════════ */
+(function(){
+  const canvas=document.getElementById('model-canvas');
+  if(!canvas)return;
+  // Wait for canvas to have dimensions (it starts in a visible sidebar)
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setClearColor(0x000000,0);
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(45,1,0.1,100);
+  camera.position.z=5;
+
+  const geo=new THREE.IcosahedronGeometry(1.8,2);
+  // Store original positions
+  const orig=new Float32Array(geo.attributes.position.array);
+
+  const solidMat=new THREE.MeshPhongMaterial({
+    color:0x0a0a0a,
+    emissive:0x080808,
+    specular:0x1a1a2e,
+    shininess:40,
+    transparent:true,opacity:.9,
+  });
+  const solid=new THREE.Mesh(geo,solidMat);
+  scene.add(solid);
+
+  const wireMat=new THREE.MeshBasicMaterial({color:0x1a1a1a,wireframe:true,transparent:true,opacity:.3});
+  const wire=new THREE.Mesh(new THREE.IcosahedronGeometry(1.81,2),wireMat);
+  scene.add(wire);
+
+  // Floating ring
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(2.5,.006,8,100),
+    new THREE.MeshBasicMaterial({color:0x222222,transparent:true,opacity:.4})
+  );
+  ring.rotation.x=Math.PI/2.8;
+  scene.add(ring);
+
+  const ring2=new THREE.Mesh(
+    new THREE.TorusGeometry(2.8,.004,8,100),
+    new THREE.MeshBasicMaterial({color:0x1a1a1a,transparent:true,opacity:.25})
+  );
+  ring2.rotation.x=Math.PI/1.8;ring2.rotation.z=Math.PI/5;
+  scene.add(ring2);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x0a0a14,3));
+  const d=new THREE.DirectionalLight(0x2244aa,2);d.position.set(3,4,5);scene.add(d);
+  const p=new THREE.PointLight(0xD93025,.6,10);p.position.set(-3,-2,3);scene.add(p);
+
+  function resize(){
+    const w=canvas.offsetWidth||canvas.parentElement.clientWidth||300;
+    const h=canvas.offsetHeight||canvas.parentElement.clientHeight||300;
+    renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  }
+  // Use ResizeObserver for reliable sizing
+  const ro=new ResizeObserver(()=>resize());
+  ro.observe(canvas.parentElement);
+  setTimeout(resize,100);
+  window.addEventListener('resize',resize);
+
+  // Expose to risk updates
+  window.setModelRisk=function(level){
+    const cols={HIGH:0xD93025,MEDIUM:0xD97706,LOW:0x16A34A};
+    const col=cols[level]||0x1a52E8;
+    wireMat.color.setHex(col);
+    p.color.setHex(col);
+  };
+
+  let t=0;
+  function animate(){
+    requestAnimationFrame(animate);
+    t+=.007;
+    solid.rotation.x=t*.35;solid.rotation.y=t*.52;
+    wire.rotation.x=solid.rotation.x;wire.rotation.y=solid.rotation.y;
+    ring.rotation.z=t*.2;ring2.rotation.y=t*.15;
+
+    // Subtle vertex pulse
+    const pos=geo.attributes.position;
+    const time=Date.now()*.001;
+    for(let i=0;i<pos.count;i++){
+      const ox=orig[i*3],oy=orig[i*3+1],oz=orig[i*3+2];
+      const noise=1+Math.sin(time*1.3+ox*3+oy*2)*0.04;
+      pos.setXYZ(i,ox*noise,oy*noise,oz*noise);
+    }
+    pos.needsUpdate=true;
+    geo.computeVertexNormals();
+
+    p.intensity=.4+Math.sin(t*2.5)*.25;
+    renderer.render(scene,camera);
+  }
+  animate();
 })();
 
-/* ═══════════════════════════════════════════════════════════
-   NAV scroll effect
-═══════════════════════════════════════════════════════════ */
-window.addEventListener('scroll', () => {
-  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 40);
-});
+/* ═══════════════════════════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════════════════════════ */
+new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12})
+  .observe.call(new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12}),document.body);
 
-/* ═══════════════════════════════════════════════════════════
-   SCROLL REVEAL (Intersection Observer)
-═══════════════════════════════════════════════════════════ */
-const revealObs = new IntersectionObserver((entries) => {
-  entries.forEach(e => {
-    if (e.isIntersecting) { e.target.classList.add('visible'); }
-  });
-}, { threshold: 0.15 });
-
-document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+const ro=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
 
 // Risk list stagger
-const riskObs = new IntersectionObserver((entries) => {
-  entries.forEach(e => {
-    if (e.isIntersecting) {
-      const rows = e.target.querySelectorAll('.risk-row');
-      rows.forEach((r, i) => {
-        setTimeout(() => r.classList.add('visible'), i * 80);
-      });
-    }
-  });
-}, { threshold: 0.2 });
-const rl = document.getElementById('risk-list');
-if (rl) riskObs.observe(rl);
+const rlo=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){e.target.querySelectorAll('.risk-item').forEach((r,i)=>setTimeout(()=>r.classList.add('visible'),i*80))}})},{threshold:.2});
+const rl=document.getElementById('risk-list');if(rl)rlo.observe(rl);
 
-/* ═══════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    ANALYZER LOGIC
-═══════════════════════════════════════════════════════════ */
-const API = 'https://clauseguard-production-183f.up.railway.app';
-let activeTab = 'url';
-let fetchedText = '';
+═══════════════════════════════════════════════════════ */
+const API='https://clauseguard-production-183f.up.railway.app';
+let activeTab='url',fetchedText='';
 
-const SAMPLES = {
-  arb:  `DISPUTES AND ARBITRATION\n\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration, and court review of an arbitration award is very limited. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one year after the date the party asserting the claim first knows or reasonably should know of the act.`,
-  data: `SHARING YOUR INFORMATION\n\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
-  ip:   `USER CONTENT LICENSE\n\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
-  liab: `DISCLAIMER AND LIABILITY CAP\n\nTHE SERVICES ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US AS A RESULT OF OUR DECISION TO REMOVE OR RESTRICT ACCESS TO YOUR CONTENT.`,
-  full: `TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, distribute, and process any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences from collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION LAWSUIT. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. THE SERVICES ARE PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
+const SAMPLES={
+  arb:`DISPUTES AND ARBITRATION\n\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one year after the date the party asserting the claim first knows or reasonably should know of the act.`,
+  data:`SHARING YOUR INFORMATION\n\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
+  ip:`USER CONTENT LICENSE\n\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
+  liab:`DISCLAIMER AND LIABILITY CAP\n\nTHE SERVICES ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US AS A RESULT OF OUR DECISION TO REMOVE OR RESTRICT ACCESS TO YOUR CONTENT.`,
+  full:`TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, and distribute any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences from collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. SERVICES PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
 };
 
-function scrollToAnalyzer() {
-  document.getElementById('analyzer').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function switchTab(name, btn) {
-  activeTab = name;
-  fetchedText = '';
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+function switchTab(name,btn){
+  activeTab=name;fetchedText='';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('panel-url').style.display   = name === 'url'   ? 'block' : 'none';
-  document.getElementById('panel-paste').style.display = name === 'paste' ? 'block' : 'none';
-  updateCharCt();
+  document.getElementById('panel-url').style.display=name==='url'?'block':'none';
+  document.getElementById('panel-paste').style.display=name==='paste'?'block':'none';
+  upd();
+}
+function setUrl(u){document.getElementById('url-in').value=u;setFetchMsg('','');fetchedText='';upd()}
+function setFetchMsg(t,c){const e=document.getElementById('fetch-msg');e.textContent=t;e.className='fetch-msg'+(c?' '+c:'')}
+function upd(){
+  const e=document.getElementById('char-ct');
+  if(activeTab==='paste'){const n=document.getElementById('paste-ta').value.length;e.textContent=n?n.toLocaleString()+' chars':'—';}
+  else if(fetchedText)e.textContent=fetchedText.length.toLocaleString()+' chars fetched';
+  else e.textContent='—';
+}
+document.getElementById('paste-ta').addEventListener('input',upd);
+document.getElementById('url-in').addEventListener('input',()=>{fetchedText='';setFetchMsg('','');upd()});
+function loadSample(k){document.getElementById('paste-ta').value=SAMPLES[k];upd()}
+
+async function fetchGo(){
+  const url=document.getElementById('url-in').value.trim();
+  if(!url){setFetchMsg('Enter a URL.','err');return}
+  const btn=document.getElementById('url-btn');
+  btn.disabled=true;fetchedText='';
+  setFetchMsg('↗ Fetching via server…','wait');upd();
+  try{
+    const res=await fetch(`${API}/fetch-url`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.error||`Error ${res.status}`);
+    fetchedText=d.text;
+    setFetchMsg(`↗ ${d.char_count.toLocaleString()} chars fetched — running analysis…`,'ok');
+    upd();await runAnalysis(fetchedText);
+  }catch(e){setFetchMsg('✗ '+e.message,'err');}
+  finally{btn.disabled=false}
 }
 
-function setUrl(url) {
-  document.getElementById('url-in').value = url;
-  setFetchMsg('', ''); fetchedText = ''; updateCharCt();
-}
-
-function setFetchMsg(txt, cls) {
-  const el = document.getElementById('fetch-msg');
-  el.textContent = txt; el.className = 'fetch-msg' + (cls ? ' ' + cls : '');
-}
-
-function updateCharCt() {
-  const el = document.getElementById('char-ct');
-  if (activeTab === 'paste') {
-    const n = document.getElementById('paste-ta').value.length;
-    el.textContent = n ? n.toLocaleString() + ' chars' : '—';
-  } else if (fetchedText) {
-    el.textContent = fetchedText.length.toLocaleString() + ' chars fetched';
-  } else { el.textContent = '—'; }
-}
-
-document.getElementById('paste-ta').addEventListener('input', updateCharCt);
-document.getElementById('url-in').addEventListener('input', () => {
-  fetchedText = ''; setFetchMsg('', ''); updateCharCt();
-});
-
-function loadSample(key) {
-  document.getElementById('paste-ta').value = SAMPLES[key];
-  updateCharCt();
-}
-
-async function fetchGo() {
-  const url = document.getElementById('url-in').value.trim();
-  if (!url) { setFetchMsg('Enter a URL to fetch.', 'err'); return; }
-
-  const btn = document.getElementById('url-btn');
-  btn.disabled = true; fetchedText = '';
-  setFetchMsg('↗ Fetching via server…', 'wait'); updateCharCt();
-
-  try {
-    const res = await fetch(`${API}/fetch-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
-    fetchedText = data.text;
-    setFetchMsg(`↗ ${data.char_count.toLocaleString()} chars fetched — running analysis…`, 'ok');
-    updateCharCt();
-    await runAnalysis(fetchedText);
-  } catch (e) {
-    let msg = e.message;
-    if (msg.includes('fetch') || msg.includes('Failed')) msg = 'Server unreachable. Try the Paste Text tab.';
-    setFetchMsg('✗ ' + msg, 'err');
-  } finally { btn.disabled = false; }
-}
-
-function analyze() {
-  const text = activeTab === 'url'
-    ? fetchedText
-    : document.getElementById('paste-ta').value.trim();
-  if (!text || text.length < 50) {
-    showErr(activeTab === 'url'
-      ? 'Fetch a URL first, or switch to Paste Text.'
-      : 'Paste at least 50 characters, or load a sample.');
-    return;
-  }
+function analyze(){
+  const text=activeTab==='url'?fetchedText:document.getElementById('paste-ta').value.trim();
+  if(!text||text.length<50){showErr(activeTab==='url'?'Fetch a URL first, or switch to Paste Text.':'Paste at least 50 characters or load a sample.');return}
   runAnalysis(text);
 }
 
-const LOGS = [
-  'Segmenting legal clauses…',
-  'Running rule classifier…',
-  'Checking negation patterns…',
-  'Computing category weights…',
-  'Building risk profile…',
-  'Finalizing…'
-];
+const LOGS=['Segmenting legal clauses…','Running rule classifier…','Detecting negation patterns…','Computing category weights…','Building risk profile…','Finalizing…'];
 
-function show(id) { document.getElementById(id).classList.add('on'); }
-function hide(id) { document.getElementById(id).classList.remove('on'); }
+function son(id){document.getElementById(id).classList.add('on')}
+function soff(id){document.getElementById(id).classList.remove('on')}
 
-async function runAnalysis(text) {
-  hide('results'); hide('err-block');
-  show('scan-overlay');
-  document.getElementById('run-btn').disabled = true;
-
-  let i = 0;
-  const sub = document.getElementById('scan-sub-txt');
-  const t = setInterval(() => { sub.textContent = LOGS[i++ % LOGS.length]; }, 700);
-
-  try {
-    const res = await fetch(`${API}/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
+async function runAnalysis(text){
+  soff('results');soff('err-block');son('scan-wrap');
+  document.getElementById('run-btn').disabled=true;
+  let i=0;const sub=document.getElementById('scan-sub');
+  const t=setInterval(()=>{sub.textContent=LOGS[i++%LOGS.length]},700);
+  try{
+    const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
     clearInterval(t);
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`HTTP ${res.status}`)}
     render(await res.json());
-  } catch (e) {
-    clearInterval(t);
-    showErr('Analysis error: ' + e.message);
-  } finally {
-    hide('scan-overlay');
-    document.getElementById('run-btn').disabled = false;
-  }
+  }catch(e){clearInterval(t);showErr('Analysis error: '+e.message)}
+  finally{soff('scan-wrap');document.getElementById('run-btn').disabled=false}
 }
 
-function showErr(msg) {
-  const el = document.getElementById('err-block');
-  el.textContent = '✗  ' + msg; show('err-block');
-  hide('scan-overlay');
-  document.getElementById('run-btn').disabled = false;
+function showErr(msg){
+  const e=document.getElementById('err-block');
+  e.textContent='✗  '+msg;son('err-block');soff('scan-wrap');
+  document.getElementById('run-btn').disabled=false;
 }
 
-function lv(s) { return s === 'HIGH' ? 'H' : s === 'MEDIUM' ? 'M' : s === 'LOW' ? 'L' : 'N'; }
+function lv(s){return s==='HIGH'?'H':s==='MEDIUM'?'M':s==='LOW'?'L':'N'}
 
-function render(data) {
-  show('results');
-  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+function render(data){
+  son('results');
+  // Trigger resize so Three.js model canvas redraws at correct size
+  window.dispatchEvent(new Event('resize'));
+  // Scroll to score card (.result-header) with nav offset
+  setTimeout(()=>{
+    const el=document.querySelector('.result-header');
+    if(el){
+      const top=el.getBoundingClientRect().top+window.scrollY-88;
+      window.scrollTo({top,behavior:'smooth'});
+    }
+  },60);
 
-  const level = data.risk_level || 'LOW';
-  const lvClass = lv(level);
-  const score = data.risk_score || 0;
+  const level=data.risk_level||'LOW';
+  const lvc=lv(level);
+  const score=data.risk_score||0;
 
-  // Update 3D crystal
-  if (window.setCrystalRisk) window.setCrystalRisk(level);
+  if(window.setModelRisk)window.setModelRisk(level);
 
-  // Score ring animation
-  const circumference = 276.5;
-  const ringEl = document.getElementById('ring-fill');
-  const ringColors = { H: '#E8322C', M: '#E8890A', L: '#1A9E52', N: '#334466' };
-  ringEl.style.stroke = ringColors[lvClass] || '#334466';
+  // Ring
+  const circ=339;
+  const fg=document.getElementById('ring-fg');
+  const rCols={H:'#D93025',M:'#D97706',L:'#16A34A',N:'#334466'};
+  fg.style.stroke=rCols[lvc]||'#334466';
 
-  // Score count-up
-  const scoreEl = document.getElementById('score-val');
-  let cur = 0;
-  const step = Math.max(1, Math.floor(score / 45));
-  const ct = setInterval(() => {
-    cur = Math.min(cur + step, score);
-    scoreEl.textContent = cur;
-    const offset = circumference - (cur / 100) * circumference;
-    ringEl.style.strokeDashoffset = offset;
-    if (cur >= score) clearInterval(ct);
-  }, 20);
+  let cur2=0,step=Math.max(1,Math.floor(score/50));
+  const numEl=document.getElementById('ring-num');
+  const ct=setInterval(()=>{
+    cur2=Math.min(cur2+step,score);
+    numEl.textContent=cur2;
+    fg.style.strokeDashoffset=circ-(cur2/100)*circ;
+    if(cur2>=score)clearInterval(ct);
+  },18);
 
-  const badge = document.getElementById('score-badge');
-  badge.className = 'score-level-badge ' + lvClass;
-  badge.textContent = level + ' RISK';
+  const badge=document.getElementById('score-badge');
+  badge.className='score-badge '+lvc;
+  badge.textContent=level+' RISK';
 
-  const heads = { H: 'High-risk document.', M: 'Moderate risk.', L: 'Low risk detected.', N: 'All clear.' };
-  document.getElementById('sum-head').textContent = heads[lvClass] || 'Complete.';
-  document.getElementById('sum-body').textContent = data.summary || '';
-  document.getElementById('m-total').textContent   = data.total_clauses_analyzed || 0;
-  document.getElementById('m-flagged').textContent = data.total_risk_clauses_detected || 0;
-  document.getElementById('m-ms').textContent      = data.processing_time_ms || 0;
+  const vrd={H:'High-risk document.',M:'Moderate risk detected.',L:'Low risk detected.',N:'All clear.'};
+  document.getElementById('result-verdict').textContent=vrd[lvc]||'Complete.';
+  document.getElementById('result-body').textContent=data.summary||'';
+  document.getElementById('m-total').textContent=data.total_clauses_analyzed||0;
+  document.getElementById('m-flagged').textContent=data.total_risk_clauses_detected||0;
+  document.getElementById('m-ms').textContent=data.processing_time_ms||0;
 
   // Categories
-  const grid = document.getElementById('cat-grid');
-  grid.innerHTML = '';
-  Object.entries(data.category_scores || {}).forEach(([key, cat], i) => {
-    const rv = lv(cat.max_risk_level || 'NONE');
-    const tile = document.createElement('div');
-    tile.className = 'cat-tile';
-    tile.style.animationDelay = (i * 55) + 'ms';
-    tile.innerHTML = `
-      <span class="ct-count">${cat.clause_count || 0}</span>
-      <div class="ct-name">${cat.label || key}</div>
-      <div class="ct-track"><div class="ct-bar ${rv}" id="cb-${key}"></div></div>
-      <div class="ct-risk ${rv}">${cat.max_risk_level === 'NONE' ? 'Clear' : cat.max_risk_level}</div>
-    `;
+  const grid=document.getElementById('cat-grid');
+  grid.innerHTML='';
+  Object.entries(data.category_scores||{}).forEach(([k,cat],i)=>{
+    const rv=lv(cat.max_risk_level||'NONE');
+    const tile=document.createElement('div');
+    tile.className='cat-tile';tile.style.animationDelay=(i*55)+'ms';
+    tile.innerHTML=`<span class="ct-n">${cat.clause_count||0}</span><div class="ct-name">${cat.label||k}</div><div class="ct-track"><div class="ct-bar ${rv}" id="cb-${k}"></div></div><div class="ct-risk ${rv}">${cat.max_risk_level==='NONE'?'Clear':cat.max_risk_level}</div>`;
     grid.appendChild(tile);
-    setTimeout(() => {
-      const b = document.getElementById('cb-' + key);
-      if (b) b.style.width = (cat.score || 0) + '%';
-    }, 100 + i * 55);
+    setTimeout(()=>{const b=document.getElementById('cb-'+k);if(b)b.style.width=(cat.score||0)+'%'},100+i*55);
   });
 
   // Clauses
-  const stack = document.getElementById('clause-stack');
-  stack.innerHTML = '';
-  const clauses = (data.clauses || []).filter(c => c.risk_level !== 'NONE');
+  const stack=document.getElementById('clause-stack');
+  stack.innerHTML='';
+  const clauses=(data.clauses||[]).filter(c=>c.risk_level!=='NONE');
+  document.getElementById('clauses-lbl').textContent=clauses.length?`Flagged Clauses — ${clauses.length}`:'Flagged Clauses';
 
-  document.getElementById('clauses-eye').textContent =
-    clauses.length ? `Flagged Clauses — ${clauses.length}` : 'Flagged Clauses';
-
-  if (!clauses.length) {
-    stack.innerHTML = `<div style="padding:32px 0;font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(255,255,255,.25);letter-spacing:1px;">✓  No risk clauses detected.</div>`;
+  if(!clauses.length){
+    stack.innerHTML='<div style="padding:32px 0;font-family:DM Mono,monospace;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:1px;">✓  No risk clauses detected.</div>';
     return;
   }
 
-  clauses.forEach((c, i) => {
-    const rv = lv(c.risk_level);
-    const card = document.createElement('div');
-    card.className = `clause-card ${rv}`;
-    card.style.animationDelay = (i * 45) + 'ms';
-    const kws = (c.matched_keywords || []).slice(0, 5).map(k => `<span class="kw-tag">${esc(k)}</span>`).join('');
-    card.innerHTML = `
-      <div class="cc-head" onclick="toggleRaw(this)">
+  clauses.forEach((c,i)=>{
+    const rv=lv(c.risk_level);
+    const card=document.createElement('div');
+    card.className=`clause-card ${rv}`;card.style.animationDelay=(i*45)+'ms';
+    const kws=(c.matched_keywords||[]).slice(0,5).map(k=>`<span class="kw-pill">${esc(k)}</span>`).join('');
+    card.innerHTML=`
+      <div class="cc-top" onclick="toggleRaw(this)">
         <div class="cc-left">
           <div class="cc-tags">
             <span class="badge ${rv}">${c.risk_level}</span>
-            <span class="badge-cat">${c.primary_category_label || c.primary_category}</span>
-            ${c.clause_number ? `<span class="badge-num">§${c.clause_number}</span>` : ''}
+            <span class="badge-cat">${c.primary_category_label||c.primary_category}</span>
+            ${c.clause_number?`<span class="badge-num">§${c.clause_number}</span>`:''}
           </div>
-          <div class="cc-excerpt">${esc(trunc(c.text, 220))}</div>
+          <div class="cc-text">${esc(trunc(c.text,220))}</div>
         </div>
         <button class="cc-toggle">View</button>
       </div>
-      ${kws ? `<div class="cc-kws">${kws}</div>` : ''}
+      ${kws?`<div class="cc-kws">${kws}</div>`:''}
       <div class="cc-raw">${esc(c.text)}</div>
     `;
     stack.appendChild(card);
   });
 }
 
-function toggleRaw(head) {
-  const raw = head.closest('.clause-card').querySelector('.cc-raw');
-  const btn = head.querySelector('.cc-toggle');
-  btn.textContent = raw.classList.toggle('open') ? 'Hide' : 'View';
+function toggleRaw(top){
+  const raw=top.closest('.clause-card').querySelector('.cc-raw');
+  const btn=top.querySelector('.cc-toggle');
+  btn.textContent=raw.classList.toggle('open')?'Hide':'View';
 }
-
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function trunc(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
-
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') analyze();
-});
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function trunc(s,n){return s.length>n?s.slice(0,n)+'…':s}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')analyze()});
 </script>
 </body>
 </html>
