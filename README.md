@@ -18,9 +18,9 @@ flagging the risks ordinary users never see before clicking "I Agree."*
 
 <br/>
 
-[![Dataset](https://img.shields.io/badge/Dataset-214%20Labeled%20Clauses-2563eb?style=flat-square)](data/annotated/)
+[![Dataset](https://img.shields.io/badge/Dataset-300%20Labeled%20Clauses-2563eb?style=flat-square)](data/annotated/)
 [![Rules](https://img.shields.io/badge/Classifier-757%20Rules-7c3aed?style=flat-square)](backend/categories.py)
-[![Documents](https://img.shields.io/badge/Documents-12%20Processed-0891b2?style=flat-square)](data/raw/)
+[![Documents](https://img.shields.io/badge/Documents-20%20Processed-0891b2?style=flat-square)](data/raw/)
 [![Categories](https://img.shields.io/badge/Risk%20Categories-7-16a34a?style=flat-square)](backend/categories.py)
 [![API](https://img.shields.io/badge/API-Live-22c55e?style=flat-square)](https://clauseguard-production-183f.up.railway.app/health)
 [![SFU](https://img.shields.io/badge/Simon%20Fraser%20University-Capstone-dc2626?style=flat-square)](https://www.sfu.ca/)
@@ -117,7 +117,7 @@ The average Terms of Service document is **~8,000 words** long. Nobody reads the
 | ![spaCy](https://img.shields.io/badge/-spaCy-09a3d5?style=flat-square) | spaCy NLP | Document → legal clause segmentation |
 | ![Rules](https://img.shields.io/badge/-Rule%20Engine-7c3aed?style=flat-square) | Custom Python | 757-rule keyword classifier with negation detection |
 | ![ML](https://img.shields.io/badge/-ML%20Classifier-2563eb?style=flat-square&logo=scikitlearn&logoColor=white) | scikit-learn | TF-IDF + Logistic Regression *(Phase 3)* |
-| ![Dataset](https://img.shields.io/badge/-Dataset-16a34a?style=flat-square) | CSV + Python | 214 human-labeled clauses across 12 real documents |
+| ![Dataset](https://img.shields.io/badge/-Dataset-16a34a?style=flat-square) | CSV + Python | 300 human-labeled clauses across 20 real documents |
 
 </div>
 
@@ -131,7 +131,7 @@ The average Terms of Service document is **~8,000 words** long. Nobody reads the
 |---|:---:|---|
 | **Phase 1** · Backend Engine | ✅ **Complete** | Flask API, spaCy segmenter, rule-based classifier (757 rules), risk scorer |
 | **Phase 2** · Extension + Dataset | ✅ **Complete** | MV3 extension, popup UI, badge alerts, SPA detection, 214-clause annotated dataset, Railway deployment |
-| **Phase 3** · ML Classifier | 🔄 **In Progress** | scikit-learn model, hybrid pipeline, inter-rater reliability check |
+| **Phase 3** · ML Classifier | 🔜 **Up Next** | scikit-learn model, hybrid pipeline, inter-rater reliability check |
 | **Phase 4** · Evaluation | 🔜 **Planned** | F1 / precision / recall vs. rule-based baseline, user study (n = 10) |
 
 </div>
@@ -309,20 +309,21 @@ clauseguard/
 
 ## 📚 Dataset
 
-The annotation dataset covers **12 documents** from major platforms:
+The annotation dataset covers **20 documents** from major platforms:
 
 <div align="center">
 
 | Privacy Policies | Terms of Service |
 |---|---|
-| Meta · Uber · Discord · Reddit | Spotify · Amazon · LinkedIn |
-| Spotify · Apple | Apple · Microsoft · Google |
+| Meta · Uber · Discord · Reddit | Spotify · Amazon · LinkedIn · DoorDash |
+| Spotify · Apple · Instagram | Apple · Microsoft · Google · Coinbase |
+| | Disney+ · Airbnb · TikTok · X (Twitter) · Snapchat |
 
-**214 human-labeled clauses** · written justification on every label · 7 risk categories
+**300 human-labeled clauses** · written justification on every label · 7 risk categories
 
 </div>
 
-> ⚠️ **TikTok ToS** was planned for Phase 2 but the official URL returned a 404 error at collection time. It will be processed in Phase 3 to strengthen the arbitration and content-rights categories.
+> ✅ **TikTok ToS** was unavailable during early Phase 2 (404 error) but was successfully processed later along with 7 additional platforms (DoorDash, Airbnb, Coinbase, Disney+, X/Twitter, Snapchat, Instagram) to complete the dataset.
 
 ---
 

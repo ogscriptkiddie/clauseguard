@@ -15,7 +15,7 @@ Read this once, then follow the commands every time you make changes.
 5. Do NOT check "Add README" — we already have one
 6. Click "Create repository"
 7. GitHub will show you a page with setup commands. Copy your repo URL.
-   It will look like: https://github.com/YOUR_USERNAME/clauseguard.git
+   It will look like: https://github.com/ogscriptkiddie/clauseguard.git
 
 ### Step 2 — Connect your local folder to GitHub
 Open your terminal, navigate to your clauseguard folder, then run:
@@ -25,7 +25,7 @@ git init
 git add .
 git commit -m "Phase 1: Backend engine — rule-based classifier, Flask API, risk scoring"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/clauseguard.git
+git remote add origin https://github.com/ogscriptkiddie/clauseguard.git
 git push -u origin main
 ```
 
@@ -133,6 +133,6 @@ negation detection and a weighted 0–100 risk scoring system.
 
 Next up: Chrome extension and ML classifier (scikit-learn).
 
-Open source: github.com/YOUR_USERNAME/clauseguard
+Open source: github.com/ogscriptkiddie/clauseguard
 
-#Python #CyberSecurity #NLP #OpenSource #UFV"
+#Python #CyberSecurity #NLP #OpenSource #SFU"
