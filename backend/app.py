@@ -1,289 +1,298 @@
 """
-app.py — ClauseGuard Flask API
-
-Endpoints:
-  GET  /health       → Liveness check
-  POST /analyze      → Full ToS analysis (text input)
-  POST /fetch-url    → Fetch a ToS page by URL, log it, return text
-
-Running locally:
-  python app.py  →  http://localhost:5000
-
-Running in production (Railway):
-  gunicorn app:app --bind 0.0.0.0:$PORT
+ClauseGuard Flask API
+======================
+Routes:
+  GET  /health           — liveness check
+  POST /analyze          — full ToS analysis (text → risk JSON)
+  POST /fetch-url        — server-side URL fetch + clean text extraction
+  GET  /submitted-urls   — log of every URL analyzed
 """
-
 import os
 import time
+import json
+import re
+import sys
 import logging
-import datetime
-
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests as http_requests
 from bs4 import BeautifulSoup
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# ── Logging ────────────────────────────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# CORS headers on every response
-# ---------------------------------------------------------------------------
+# ── App setup ──────────────────────────────────────────────────────────────────
+app = Flask(__name__)
+CORS(app)
 
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
-
-# ---------------------------------------------------------------------------
-# Pipeline imports
-# ---------------------------------------------------------------------------
-
-from segmenter import segment_document, segment_document_numbered
+# ── Load classifiers ───────────────────────────────────────────────────────────
+# Rule-based (always available — no model file needed)
 from classifier import RuleBasedClassifier
-from scorer import compute_risk_score, generate_summary
+rule_classifier = RuleBasedClassifier()
 
-classifier = RuleBasedClassifier()
+# Hybrid (ML + rule-based fallback)
+try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from ml.hybrid import HybridClassifier
+    classifier = HybridClassifier(rule_based_classifier=rule_classifier)
+    logger.info("✅ HybridClassifier loaded (ML + rule-based fallback)")
+    CLASSIFIER_MODE = "hybrid"
+except Exception as e:
+    logger.warning(f"⚠️  HybridClassifier unavailable ({e}), falling back to rule-based only")
+    classifier = None
+    CLASSIFIER_MODE = "rule_based"
 
-MAX_TEXT_LENGTH = 500_000
-MIN_TEXT_LENGTH = 50
+# ── spaCy segmenter ────────────────────────────────────────────────────────────
+try:
+    from segmenter import segment_clauses
+    logger.info("✅ spaCy segmenter loaded")
+except Exception as e:
+    logger.warning(f"⚠️  spaCy segmenter unavailable ({e}), using fallback")
+    def segment_clauses(text):
+        """Simple fallback segmenter: split on double newlines or numbered items."""
+        parts = re.split(r'\n{2,}|\n(?=\d+\.|\([a-z]\))', text)
+        return [p.strip() for p in parts if len(p.strip()) > 40]
 
-# ---------------------------------------------------------------------------
-# URL log — saved alongside app.py, persists within a Railway deploy session
-# Viewable in Railway logs and downloadable from dashboard
-# ---------------------------------------------------------------------------
+# ── Category metadata ──────────────────────────────────────────────────────────
+CATEGORY_META = {
+    "data_sharing":        {"label": "Data Sharing",        "weight": 0.22},
+    "tracking_profiling":  {"label": "Tracking & Profiling","weight": 0.20},
+    "third_party_access":  {"label": "Third-Party Access",  "weight": 0.13},
+    "data_retention":      {"label": "Data Retention",      "weight": 0.13},
+    "arbitration":         {"label": "Arbitration",         "weight": 0.13},
+    "content_rights":      {"label": "Content & IP Rights", "weight": 0.10},
+    "liability_limitation":{"label": "Liability Limitation","weight": 0.09},
+}
 
-URL_LOG_PATH = os.path.join(os.path.dirname(__file__), "submitted_urls.txt")
+RISK_SCORE = {"HIGH": 100, "MEDIUM": 60, "LOW": 25, "NONE": 0}
 
-def log_url(url: str, status: str = "ok", char_count: int = 0):
-    """Append a submitted URL to the log file and Railway stdout."""
-    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    entry = f"{timestamp}\t{status}\t{char_count}\t{url}\n"
-    try:
-        with open(URL_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(entry)
-    except Exception:
-        pass
-    logger.info(f"[URL_LOG] {status.upper()} | {char_count} chars | {url}")
+# ── URL log ────────────────────────────────────────────────────────────────────
+_url_log = []
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+def _score_from_clauses(clauses_with_risk):
+    """Compute 0-100 risk score from a list of classified clauses."""
+    cat_scores = {k: {"clauses": [], "score": 0} for k in CATEGORY_META}
+
+    for c in clauses_with_risk:
+        cat = c.get("category", "none")
+        if cat not in cat_scores:
+            continue
+        base = RISK_SCORE.get(c.get("risk_level", "NONE"), 0)
+        cat_scores[cat]["clauses"].append(c)
+        # Bonus +5 per extra clause in same category, capped at +10
+        n = len(cat_scores[cat]["clauses"])
+        bonus = min((n - 1) * 5, 10)
+        cat_scores[cat]["score"] = min(base + bonus, 100)
+
+    # Weighted average
+    total_weight = sum(CATEGORY_META[k]["weight"] for k in cat_scores)
+    weighted_sum = sum(
+        cat_scores[k]["score"] * CATEGORY_META[k]["weight"]
+        for k in cat_scores
+    )
+    final_score = round(weighted_sum / total_weight) if total_weight else 0
+
+    if final_score >= 60:
+        risk_level = "HIGH"
+    elif final_score >= 30:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "LOW"
+
+    return final_score, risk_level, cat_scores
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-@app.route("/", methods=["GET"])
-def index():
-    return jsonify({
-        "service": "ClauseGuard API",
-        "status": "ok",
-        "version": "1.0.0",
-        "endpoints": {
-            "health":    "GET  /health",
-            "analyze":   "POST /analyze",
-            "fetch_url": "POST /fetch-url",
-        }
-    }), 200
+def _max_risk_in_cat(clauses):
+    order = ["HIGH", "MEDIUM", "LOW", "NONE"]
+    found = [c.get("risk_level", "NONE") for c in clauses]
+    for r in order:
+        if r in found:
+            return r
+    return "NONE"
 
 
+def _build_summary(score, risk_level, n_flagged, n_total):
+    if risk_level == "HIGH":
+        return (f"This document contains {n_flagged} high-risk clause(s) out of "
+                f"{n_total} analyzed. Significant privacy and legal risks were detected "
+                f"that may limit your rights or expose your data.")
+    if risk_level == "MEDIUM":
+        return (f"{n_flagged} clause(s) of concern were found across {n_total} analyzed. "
+                f"Some data handling and liability provisions warrant attention.")
+    return (f"Low risk detected. {n_flagged} minor clause(s) found across "
+            f"{n_total} analyzed. This document appears relatively user-friendly.")
+
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "ClauseGuard API", "version": "1.0.0"}), 200
+    return jsonify({
+        "status":          "ok",
+        "classifier_mode": CLASSIFIER_MODE,
+        "version":         "3.0.0",
+    })
 
 
-@app.route("/fetch-url", methods=["POST", "OPTIONS"])
-def fetch_url():
-    """
-    Fetches a ToS / Privacy Policy page by URL, extracts its text,
-    logs the URL for future dataset use, and returns the plain text.
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
 
-    Request body (JSON):
-      { "url": "https://discord.com/privacy" }
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+    if len(text) < 50:
+        return jsonify({"error": "Text too short (minimum 50 characters)"}), 400
 
-    Response (JSON):
-      { "text": "...", "char_count": 12345, "url": "..." }
-    """
-    if request.method == "OPTIONS":
-        return jsonify({}), 200
+    t0 = time.time()
 
-    data = request.get_json(silent=True)
-    if not data or "url" not in data:
-        return _error("Missing required field: 'url'.", 400)
+    # 1. Segment
+    clauses = segment_clauses(text)
+    logger.info(f"Segmented into {len(clauses)} clauses")
 
-    url = str(data["url"]).strip()
+    # 2. Classify
+    classified = []
+    if CLASSIFIER_MODE == "hybrid" and classifier:
+        results = classifier.classify_batch(clauses)
+        for i, (clause_text, res) in enumerate(zip(clauses, results)):
+            classified.append({
+                "clause_number":         i + 1,
+                "text":                  clause_text,
+                "category":              res["category"],
+                "primary_category":      res["category"],
+                "primary_category_label":res.get("category_label", res["category"]),
+                "risk_level":            res["risk_level"],
+                "confidence":            res["confidence"],
+                "source":                res["source"],
+                "matched_keywords":      res.get("matched_keywords", []),
+            })
+    else:
+        # Rule-based only fallback
+        for i, clause_text in enumerate(clauses):
+            res = rule_classifier.classify(clause_text)
+            classified.append({
+                "clause_number":         i + 1,
+                "text":                  clause_text,
+                "category":              res.get("category", "none"),
+                "primary_category":      res.get("category", "none"),
+                "primary_category_label":CATEGORY_META.get(
+                    res.get("category", ""), {}).get("label", ""),
+                "risk_level":            res.get("risk_level", "NONE"),
+                "confidence":            1.0,
+                "source":                "rule_based",
+                "matched_keywords":      res.get("matched_keywords", []),
+            })
 
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
+    # 3. Filter to only risk clauses for the response
+    risk_clauses = [c for c in classified if c["risk_level"] != "NONE"
+                    and c["category"] != "none"]
 
-    logger.info(f"Fetching URL: {url}")
+    # 4. Score
+    final_score, risk_level, cat_scores = _score_from_clauses(risk_clauses)
+    ms = round((time.time() - t0) * 1000)
 
-    try:
-        resp = http_requests.get(
-            url,
-            timeout=15,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0 Safari/537.36"
-                )
-            },
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
-    except http_requests.exceptions.Timeout:
-        log_url(url, "timeout")
-        return _error("Request timed out. The page took too long to respond.", 504)
-    except http_requests.exceptions.RequestException as e:
-        log_url(url, "error")
-        return _error(f"Could not fetch URL: {str(e)}", 502)
-
-    # Extract readable text with BeautifulSoup
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    # Remove nav, header, footer, script, style — keep body prose
-    for tag in soup(["script", "style", "nav", "header", "footer",
-                     "aside", "form", "button", "noscript", "iframe"]):
-        tag.decompose()
-
-    text = soup.get_text(separator="\n", strip=True)
-
-    # Collapse excessive blank lines
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    text = "\n".join(lines)
-
-    if len(text) < MIN_TEXT_LENGTH:
-        log_url(url, "too_short", len(text))
-        return _error(
-            "Page text too short after extraction. "
-            "This page may require JavaScript or block automated access.", 422
-        )
-
-    log_url(url, "ok", len(text))
+    # 5. Build category_scores response
+    category_scores = {}
+    for cat, meta in CATEGORY_META.items():
+        cat_clauses = cat_scores[cat]["clauses"]
+        category_scores[cat] = {
+            "label":         meta["label"],
+            "weight":        meta["weight"],
+            "clause_count":  len(cat_clauses),
+            "score":         cat_scores[cat]["score"],
+            "max_risk_level": _max_risk_in_cat(cat_clauses),
+        }
 
     return jsonify({
+        "risk_score":                final_score,
+        "risk_level":                risk_level,
+        "summary":                   _build_summary(
+            final_score, risk_level, len(risk_clauses), len(clauses)
+        ),
+        "total_clauses_analyzed":    len(clauses),
+        "total_risk_clauses_detected": len(risk_clauses),
+        "processing_time_ms":        ms,
+        "classifier_mode":           CLASSIFIER_MODE,
+        "category_scores":           category_scores,
+        "clauses":                   classified,  # all clauses (frontend filters)
+    })
+
+
+@app.route("/fetch-url", methods=["POST"])
+def fetch_url():
+    data = request.get_json(silent=True) or {}
+    url  = (data.get("url") or "").strip()
+
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept":          "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    try:
+        resp = http_requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        resp.raise_for_status()
+    except http_requests.exceptions.Timeout:
+        return jsonify({"error": "Request timed out after 15 seconds"}), 504
+    except http_requests.exceptions.ConnectionError:
+        return jsonify({"error": f"Could not connect to {url}"}), 502
+    except http_requests.exceptions.HTTPError as e:
+        return jsonify({"error": f"HTTP {e.response.status_code}: {url}"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    # Remove non-content elements
+    for tag in soup(["script", "style", "nav", "header", "footer",
+                     "iframe", "noscript", "aside", "form", "button",
+                     "img", "svg", "figure", "picture"]):
+        tag.decompose()
+
+    # Try to find main content block
+    main = (soup.find("main") or
+            soup.find("article") or
+            soup.find(id=re.compile(r"content|main|body|terms|privacy", re.I)) or
+            soup.find(class_=re.compile(r"content|main|body|terms|privacy", re.I)) or
+            soup.body or
+            soup)
+
+    raw_text = main.get_text(separator="\n")
+
+    # Clean up whitespace
+    lines = [l.strip() for l in raw_text.splitlines()]
+    lines = [l for l in lines if l and len(l) > 15]
+    clean_text = "\n".join(lines)
+
+    if len(clean_text) < 100:
+        return jsonify({"error": "Could not extract meaningful text from this URL. "
+                                  "Try pasting the text directly."}), 422
+
+    _url_log.append(url)
+    logger.info(f"Fetched {url} → {len(clean_text)} chars")
+
+    return jsonify({
+        "text":       clean_text,
+        "char_count": len(clean_text),
         "url":        url,
-        "text":       text[:MAX_TEXT_LENGTH],
-        "char_count": len(text),
-    }), 200
+    })
 
 
 @app.route("/submitted-urls", methods=["GET"])
 def submitted_urls():
-    """
-    Returns all URLs submitted via /fetch-url.
-    Useful for harvesting new ToS documents for Phase 3 dataset expansion.
-    Protected by a simple token — set URL_LOG_TOKEN env var on Railway.
-    """
-    token = os.environ.get("URL_LOG_TOKEN", "")
-    if token and request.args.get("token") != token:
-        return _error("Unauthorized.", 401)
-
-    try:
-        if not os.path.exists(URL_LOG_PATH):
-            return jsonify({"urls": [], "count": 0}), 200
-        with open(URL_LOG_PATH, encoding="utf-8") as f:
-            lines = [l.strip() for l in f if l.strip()]
-        entries = []
-        for line in lines:
-            parts = line.split("\t")
-            if len(parts) == 4:
-                entries.append({
-                    "timestamp":  parts[0],
-                    "status":     parts[1],
-                    "char_count": int(parts[2]) if parts[2].isdigit() else 0,
-                    "url":        parts[3],
-                })
-        return jsonify({"urls": entries, "count": len(entries)}), 200
-    except Exception as e:
-        return _error(f"Could not read log: {str(e)}", 500)
+    return jsonify({"urls": _url_log, "count": len(_url_log)})
 
 
-@app.route("/analyze", methods=["POST", "OPTIONS"])
-def analyze():
-    if request.method == "OPTIONS":
-        return jsonify({}), 200
-
-    start = time.time()
-    data = request.get_json(silent=True)
-
-    if not data:
-        return _error("Request body must be valid JSON.", 400)
-    if "text" not in data:
-        return _error("Missing required field: 'text'.", 400)
-
-    text = data["text"]
-    if not isinstance(text, str):
-        return _error("Field 'text' must be a string.", 400)
-
-    text = text.strip()
-
-    if len(text) < MIN_TEXT_LENGTH:
-        return _error(f"Text too short (minimum {MIN_TEXT_LENGTH} characters).", 400)
-    if len(text) > MAX_TEXT_LENGTH:
-        return _error(f"Text too large (maximum {MAX_TEXT_LENGTH:,} characters).", 413)
-
-    try:
-        numbered_clauses = segment_document_numbered(text)
-        total_clauses = len(numbered_clauses)
-        logger.info(f"Segmented into {total_clauses} clauses.")
-
-        if not numbered_clauses:
-            return _error("Document could not be segmented.", 422)
-
-        clause_texts  = [c["text"] for c in numbered_clauses]
-        clause_numbers = {c["text"]: c["clause_number"] for c in numbered_clauses}
-
-        classified = classifier.classify_document(clause_texts)
-        logger.info(f"Detected {len(classified)} risk-relevant clauses.")
-
-        for result in classified:
-            result["clause_number"] = clause_numbers.get(result["text"], None)
-
-        score_result = compute_risk_score(classified)
-        summary      = generate_summary(score_result, classified)
-        elapsed_ms   = round((time.time() - start) * 1000)
-
-        return jsonify({
-            "risk_score":                  score_result["overall_score"],
-            "risk_level":                  score_result["overall_risk_level"],
-            "summary":                     summary,
-            "total_clauses_analyzed":      total_clauses,
-            "total_risk_clauses_detected": len(classified),
-            "category_scores":             score_result["category_scores"],
-            "clauses":                     classified,
-            "processing_time_ms":          elapsed_ms,
-        }), 200
-
-    except Exception as exc:
-        logger.exception("Unhandled error during analysis.")
-        return _error(f"Internal analysis error: {str(exc)}", 500)
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _error(message: str, status_code: int):
-    return jsonify({"error": message}), status_code
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+# ── Entry point ────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
