@@ -538,9 +538,9 @@ nav.light-nav{background:rgba(245,243,238,.95);backdrop-filter:blur(16px);border
 
 .cc-text{
   font-family:'DM Sans',sans-serif;
-  font-size:14px;font-weight:300;
-  color:rgba(255,255,255,.7);line-height:1.65;
-  font-style:italic;
+  font-size:14px;font-weight:400;
+  color:rgba(255,255,255,.82);line-height:1.7;
+  font-style:normal;
 }
 
 .cc-toggle{
@@ -554,6 +554,25 @@ nav.light-nav{background:rgba(245,243,238,.95);backdrop-filter:blur(16px);border
 .cc-toggle:hover{color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)}
 
 .cc-kws{padding:0 20px 14px;display:flex;flex-wrap:wrap;gap:6px}
+/* Consumer explanation box */
+.cc-meaning{
+  margin:0 20px 16px;
+  padding:12px 16px;
+  border-left:2px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.025);
+}
+.cc-meaning-label{
+  font-family:'DM Mono',monospace;
+  font-size:8px;letter-spacing:2.5px;text-transform:uppercase;
+  color:rgba(255,255,255,.25);margin-bottom:6px;
+}
+.cc-meaning-text{
+  font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:400;
+  color:rgba(255,255,255,.65);line-height:1.7;
+}
+.cc-meaning-text strong{font-weight:500;color:rgba(255,255,255,.85)}
+
 .kw-pill{
   font-family:'DM Mono',monospace;font-size:9px;
   color:rgba(201,150,12,.7);
@@ -722,11 +741,11 @@ footer{
       <div class="stat-l">Classifier<br/>Rules</div>
     </div>
     <div class="stat-item">
-      <div class="stat-n">300</div>
+      <div class="stat-n">214</div>
       <div class="stat-l">Human-Labeled<br/>Clauses</div>
     </div>
     <div class="stat-item">
-      <div class="stat-n">20</div>
+      <div class="stat-n">12</div>
       <div class="stat-l">Real ToS<br/>Documents</div>
     </div>
     <div class="stat-item">
@@ -1215,6 +1234,57 @@ function showErr(msg){
 
 function lv(s){return s==='HIGH'?'H':s==='MEDIUM'?'M':s==='LOW'?'L':'N'}
 
+
+/* ═══════════════════════════════════════════════════════
+   CONSUMER EXPLANATIONS — plain English for each
+   category × risk level combination
+═══════════════════════════════════════════════════════ */
+const MEANINGS = {
+  data_sharing: {
+    H: "This company can <strong>sell or share your personal information</strong> with advertisers, data brokers, or other companies for commercial purposes. You have little to no control over where your data ends up.",
+    M: "This company shares some of your information with selected partners. It may be used for advertising or analytics, but is not necessarily sold outright.",
+    L: "Your data may be shared with service providers who help run the platform, but this is generally limited and for operational purposes only."
+  },
+  tracking_profiling: {
+    H: "This company <strong>tracks your behavior across websites and apps</strong>, builds a detailed profile of your interests, age, income, and political views, and uses or sells that profile for targeted advertising.",
+    M: "This company uses cookies and analytics to understand how you use their service. Some personalization and ad targeting may occur.",
+    L: "Basic usage analytics are collected to improve the service. Limited behavioral tracking is involved."
+  },
+  third_party_access: {
+    H: "Outside parties — including <strong>employers, law enforcement, or advertisers</strong> — can access your account data, communications, or files. In some cases this happens without notifying you.",
+    M: "Third-party services integrated into the platform may access limited portions of your data. Government or legal requests may also require disclosure.",
+    L: "Third parties have restricted access, typically limited to what is necessary to provide integrated features you've opted into."
+  },
+  data_retention: {
+    H: "This company <strong>keeps your data indefinitely</strong>, even after you delete your account. Backup copies may persist for years and can be used for internal purposes or legal investigations.",
+    M: "Your data is retained for a defined but potentially extended period after you leave. Some information may persist in backups or anonymized form.",
+    L: "Data is kept for a limited, reasonable period for legal or operational compliance before being deleted."
+  },
+  arbitration: {
+    H: "You are <strong>giving up your right to sue this company in court</strong> or join a class action lawsuit. All disputes must go through private arbitration, where the arbitrator's decision is final and cannot be appealed.",
+    M: "Disputes are directed toward arbitration or a specific jurisdiction's courts. Your legal options are limited but not entirely removed.",
+    L: "There are some procedural limitations on how you can bring claims, but your fundamental right to legal recourse is largely preserved."
+  },
+  content_rights: {
+    H: "By posting anything on this platform, you grant the company a <strong>permanent, worldwide, royalty-free license</strong> to use, copy, modify, and sublicense your content — forever, even after you delete it. You may also be waiving moral rights (the right to be credited as the author).",
+    M: "The platform takes a broad license over your content to operate and promote the service. The license may extend beyond what you would expect for basic functionality.",
+    L: "The platform takes a license over your content for the limited purpose of displaying and operating the service. This is standard for most platforms."
+  },
+  liability_limitation: {
+    H: "If this company causes you harm — through data breaches, service failures, or any other reason — your ability to recover damages is <strong>severely limited or capped at as little as $10</strong>. You may also be waiving your right to sue them entirely.",
+    M: "The company limits its liability for indirect or consequential damages. You can still seek some compensation but recovery may be restricted.",
+    L: "Standard warranty disclaimers are present. The company limits liability for things outside its reasonable control, which is common practice."
+  }
+};
+
+function getConsumerMeaning(category, riskLevel) {
+  const catKey = (category || '').toLowerCase().replace(/[^a-z_]/g,'');
+  const rl = (riskLevel || 'L').charAt(0).toUpperCase();
+  const cat = MEANINGS[catKey];
+  if (!cat) return null;
+  return cat[rl] || cat['M'] || null;
+}
+
 function render(data){
   son('results');
   // Trigger resize so Three.js model canvas redraws at correct size
@@ -1288,6 +1358,7 @@ function render(data){
     const card=document.createElement('div');
     card.className=`clause-card ${rv}`;card.style.animationDelay=(i*45)+'ms';
     const kws=(c.matched_keywords||[]).slice(0,5).map(k=>`<span class="kw-pill">${esc(k)}</span>`).join('');
+    const meaning=getConsumerMeaning(c.primary_category,c.risk_level);
     card.innerHTML=`
       <div class="cc-top" onclick="toggleRaw(this)">
         <div class="cc-left">
@@ -1300,6 +1371,11 @@ function render(data){
         </div>
         <button class="cc-toggle">View</button>
       </div>
+      ${meaning?`
+      <div class="cc-meaning">
+        <div class="cc-meaning-label">What this means for you</div>
+        <div class="cc-meaning-text">${meaning}</div>
+      </div>`:''}
       ${kws?`<div class="cc-kws">${kws}</div>`:''}
       <div class="cc-raw">${esc(c.text)}</div>
     `;
