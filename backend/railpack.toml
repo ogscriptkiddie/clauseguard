@@ -1,0 +1,2 @@
+echo '[phases.setup]
+aptPkgs = ["libgomp1"]' > backend/railpack.toml
