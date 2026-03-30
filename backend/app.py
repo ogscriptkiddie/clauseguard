@@ -92,7 +92,9 @@ try:
         getattr(_seg_module, "segment_clauses", None) or
         getattr(_seg_module, "segment", None) or
         getattr(_seg_module, "segmentClauses", None) or
-        getattr(_seg_module, "get_clauses", None)
+        getattr(_seg_module, "get_clauses", None) or
+        getattr(_seg_module, "segment_document", None) or
+        getattr(_seg_module, "segment_document_numbered", None)
     )
     if segment_clauses is None:
         raise AttributeError("No recognised segmenter function in segmenter.py")
