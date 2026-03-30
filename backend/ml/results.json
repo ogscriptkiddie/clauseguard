@@ -1,13 +1,12 @@
 {
-  "cv_f1_macro_mean": 0.7646,
-  "cv_f1_macro_std": 0.0274,
-  "cv_f1_weighted_mean": 0.7629,
-  "cv_f1_weighted_std": 0.0266,
-  "full_dataset_f1_macro": 0.997,
+  "group_cv_f1_macro_mean": 0.7166,
+  "group_cv_f1_macro_std": 0.0401,
+  "confidence_threshold": 0.6,
   "n_samples": 312,
   "n_classes": 7,
   "n_folds": 5,
-  "model": "TF-IDF(1-3gram,15k) + LogisticRegression(C=1,balanced) + CalibratedClassifierCV(isotonic,cv=5)",
+  "cv_method": "GroupKFold (split by document \u2014 honest)",
+  "model": "TF-IDF(1-3gram,15k) + LR(C=1,balanced) + CalibratedClassifierCV(isotonic,cv=5)",
   "top_features": {
     "arbitration": [
       "arbitration",
@@ -17,9 +16,7 @@
       "claims",
       "individual",
       "binding",
-      "court",
-      "action",
-      "in"
+      "court"
     ],
     "content_rights": [
       "license",
@@ -29,9 +26,7 @@
       "license to",
       "your content",
       "worldwide",
-      "royalty free",
-      "royalty",
-      "user content"
+      "royalty free"
     ],
     "data_retention": [
       "account",
@@ -41,9 +36,7 @@
       "for",
       "purposes",
       "after",
-      "your",
-      "obligations",
-      "legal"
+      "your"
     ],
     "data_sharing": [
       "share",
@@ -53,9 +46,7 @@
       "with",
       "share your",
       "companies",
-      "we may share",
-      "share your information",
-      "share information"
+      "we may share"
     ],
     "liability_limitation": [
       "liability",
@@ -65,9 +56,7 @@
       "implied",
       "no",
       "loss",
-      "warranty",
-      "spotify",
-      "its"
+      "warranty"
     ],
     "third_party_access": [
       "third",
@@ -77,9 +66,7 @@
       "party",
       "parties",
       "may",
-      "information",
-      "third parties",
-      "disclose"
+      "information"
     ],
     "tracking_profiling": [
       "advertising",
@@ -89,74 +76,7 @@
       "about",
       "data",
       "usage",
-      "device",
-      "we",
-      "features"
+      "device"
     ]
-  },
-  "per_class_report": {
-    "arbitration": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 42.0
-    },
-    "content_rights": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 38.0
-    },
-    "data_retention": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 43.0
-    },
-    "data_sharing": {
-      "precision": 1.0,
-      "recall": 0.9767,
-      "f1-score": 0.9882,
-      "support": 43.0
-    },
-    "liability_limitation": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 46.0
-    },
-    "third_party_access": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 46.0
-    },
-    "tracking_profiling": {
-      "precision": 0.9818,
-      "recall": 1.0,
-      "f1-score": 0.9908,
-      "support": 54.0
-    },
-    "macro avg": {
-      "precision": 0.9974,
-      "recall": 0.9967,
-      "f1-score": 0.997,
-      "support": 312.0
-    },
-    "weighted avg": {
-      "precision": 0.9969,
-      "recall": 0.9968,
-      "f1-score": 0.9968,
-      "support": 312.0
-    }
-  },
-  "category_counts": {
-    "tracking_profiling": 54,
-    "liability_limitation": 46,
-    "third_party_access": 46,
-    "data_sharing": 43,
-    "data_retention": 43,
-    "arbitration": 42,
-    "content_rights": 38
   }
 }

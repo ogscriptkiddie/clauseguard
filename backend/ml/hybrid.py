@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ml.classifier_ml import MLClassifier
 
-CONFIDENCE_THRESHOLD = 0.40
+CONFIDENCE_THRESHOLD = 0.60
 
 CATEGORY_LABELS = {
     "data_sharing": "Data Sharing",
