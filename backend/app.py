@@ -41,8 +41,16 @@ def _rule_classify(text):
     if _rule_method is None:
         return {}
     try:
-        return getattr(rule_classifier, _rule_method)(text) or {}
-    except Exception:
+        result = getattr(rule_classifier, _rule_method)(text)
+        # classify_clause returns a list of matches — take the highest-confidence one
+        if isinstance(result, list):
+            if not result:
+                return {}
+            # Sort by confidence descending, take first
+            result = sorted(result, key=lambda x: x.get("confidence", 0), reverse=True)[0]
+        return result or {}
+    except Exception as e:
+        logger.warning(f"Rule classify error: {e}")
         return {}
 
 # ── Hybrid classifier (ML + rule fallback) ─────────────────────────────────────
