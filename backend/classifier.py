@@ -1,23 +1,10 @@
 """
 classifier.py — ClauseGuard Rule-Based Classifier
 
-Classifies segmented clauses into security/privacy risk categories using
-keyword matching with context-awareness and negation detection.
-
-Architecture note:
-  This rule-based engine serves two roles in the ClauseGuard system:
-    1. Primary classifier in Phase 1 (this file)
-    2. Label generator for the Phase 2 ML training set
-
-  Because of role #2, precision matters more than recall here. We want
-  the labels we generate to be correct — even if that means missing some
-  clauses — so the ML model learns from clean signal.
-
-Negation handling:
-  Naive keyword matching produces false positives on negated clauses, e.g.
-  "We do NOT sell your data" should NOT be flagged as data_sharing HIGH.
-  A simple negation window (10 words before the keyword match) catches the
-  most common patterns.
+Fixed version:
+- Adds a compatibility `classify()` method that returns one normalized dict.
+- Keeps existing `classify_clause()` behavior for Phase 1 / label generation.
+- Lets HybridClassifier safely call into the rule engine.
 """
 
 import re
@@ -26,25 +13,17 @@ from categories import CATEGORIES, RISK_LEVEL_ORDER
 
 logger = logging.getLogger(__name__)
 
-# Window (in words) to search for negation signals before a keyword match
 NEGATION_WINDOW = 10
 
 NEGATION_SIGNALS = [
-    # Multi-word subject+verb phrases — these are specific enough to be safe
     "we do not", "we don't", "we will not", "we won't", "we never",
     "we do not sell", "we do not share", "we will not sell", "we will not share",
     "we do not collect", "we do not use", "we do not disclose",
     "does not sell", "does not share", "does not collect",
     "tiktok does not", "spotify does not", "we are not",
-    # Passive negations
     "will not be shared", "will not be sold", "will not be used",
     "is not shared", "is not sold", "are not shared", "are not sold",
     "shall not be shared", "shall not be sold",
-    # Note: single words like "not", "no", "never", "without" are intentionally
-    # excluded. They cause false negations on legitimate risk language:
-    #   - "no warranty", "make no warranties" (liability disclaimers — HIGH risk)
-    #   - "without limitation" (liability language)
-    #   - "not liable" (liability language — should still be flagged)
 ]
 
 
@@ -52,37 +31,17 @@ class RuleBasedClassifier:
     """
     Classifies text clauses into security/privacy risk categories.
 
-    Usage:
-        clf = RuleBasedClassifier()
-
-        # Classify a single clause → list of category matches
-        matches = clf.classify_clause("We may share your data with advertisers.")
-
-        # Classify a full document (list of clause strings)
-        results = clf.classify_document(clauses)
+    Interfaces:
+      - classify_clause(text) -> list[dict]  # all matches
+      - classify(text) -> dict               # best single match (compatibility)
+      - classify_document(clauses) -> list[dict]
     """
 
     def classify_clause(self, clause_text: str) -> list[dict]:
         """
         Classifies a single clause across all categories.
 
-        A clause can match multiple categories (e.g., one clause might address
-        both data_sharing and third_party_access). Each match is returned
-        independently so the scorer can weight them separately.
-
-        Returns:
-            List of match dicts, one per matched category:
-            [
-                {
-                    "category":         "data_sharing",
-                    "category_label":   "Data Sharing",
-                    "risk_level":       "HIGH",
-                    "matched_keywords": ["sell your data"],
-                    "confidence":       0.85,
-                    "negated":          False
-                },
-                ...
-            ]
+        Returns a list of category match dicts.
         """
         text_lower = clause_text.lower()
         matches: list[dict] = []
@@ -94,11 +53,11 @@ class RuleBasedClassifier:
 
             risk_level, matched_keywords = result
 
-            # Check negation: if the match appears to be negated, skip it
             if self._is_negated(text_lower, matched_keywords):
                 logger.debug(
-                    f"Skipping negated match: category={category_id}, "
-                    f"keywords={matched_keywords}"
+                    "Skipping negated match: category=%s, keywords=%s",
+                    category_id,
+                    matched_keywords,
                 )
                 continue
 
@@ -113,25 +72,46 @@ class RuleBasedClassifier:
 
         return matches
 
+    def classify(self, clause_text: str) -> dict:
+        """
+        Compatibility wrapper for HybridClassifier.
+
+        Returns one normalized best-match dict instead of a list.
+        If nothing matches, returns a stable "none" record.
+        """
+        matches = self.classify_clause(clause_text)
+        if not matches:
+            return {
+                "category": "none",
+                "category_label": "None",
+                "risk_level": "NONE",
+                "matched_keywords": [],
+                "confidence": 0.0,
+                "negated": False,
+                "source": "rule_based",
+                "all_matches": [],
+            }
+
+        primary = max(
+            matches,
+            key=lambda m: (RISK_LEVEL_ORDER[m["risk_level"]], m["confidence"]),
+        )
+
+        return {
+            "category": primary["category"],
+            "category_label": primary["category_label"],
+            "risk_level": primary["risk_level"],
+            "matched_keywords": primary["matched_keywords"],
+            "confidence": primary["confidence"],
+            "negated": primary.get("negated", False),
+            "source": "rule_based",
+            "all_matches": matches,
+        }
+
     def classify_document(self, clauses: list[str]) -> list[dict]:
         """
         Classifies a list of clause strings.
         Only clauses that match at least one risk category are returned.
-
-        Returns:
-            List of enriched clause dicts:
-            [
-                {
-                    "text":                   "We may sell your data...",
-                    "primary_category":       "data_sharing",
-                    "primary_category_label": "Data Sharing",
-                    "risk_level":             "HIGH",
-                    "matched_keywords":       ["sell your data"],
-                    "confidence":             0.85,
-                    "all_matches":            [...]   ← all category matches for this clause
-                },
-                ...
-            ]
         """
         results: list[dict] = []
 
@@ -140,15 +120,9 @@ class RuleBasedClassifier:
             if not clause_text:
                 continue
 
-            matches = self.classify_clause(clause_text)
-            if not matches:
+            primary = self.classify(clause_text)
+            if primary["category"] == "none":
                 continue
-
-            # Primary match = highest risk level; tie-break on confidence
-            primary = max(
-                matches,
-                key=lambda m: (RISK_LEVEL_ORDER[m["risk_level"]], m["confidence"])
-            )
 
             results.append({
                 "text": clause_text,
@@ -157,25 +131,12 @@ class RuleBasedClassifier:
                 "risk_level": primary["risk_level"],
                 "matched_keywords": primary["matched_keywords"],
                 "confidence": primary["confidence"],
-                "all_matches": matches,
+                "all_matches": primary.get("all_matches", []),
             })
 
         return results
 
-    # -----------------------------------------------------------------------
-    # Private helpers
-    # -----------------------------------------------------------------------
-
-    def _find_best_match(
-        self, text_lower: str, rules: dict[str, list[str]]
-    ) -> tuple[str, list[str]] | None:
-        """
-        Searches for keyword matches across all risk levels for one category.
-        Checks HIGH → MEDIUM → LOW and returns the first (highest severity) match.
-
-        Returns:
-            Tuple of (risk_level, [matched_keywords]) or None if no match.
-        """
+    def _find_best_match(self, text_lower: str, rules: dict[str, list[str]]) -> tuple[str, list[str]] | None:
         for risk_level in ["HIGH", "MEDIUM", "LOW"]:
             keywords = rules.get(risk_level, [])
             matched = [kw for kw in keywords if self._keyword_match(kw, text_lower)]
@@ -184,95 +145,40 @@ class RuleBasedClassifier:
         return None
 
     def _keyword_match(self, keyword: str, text_lower: str) -> bool:
-        """
-        Matches a keyword/phrase against lowercased clause text.
-
-        Three matching modes:
-          Single word:        word-boundary regex — avoids partial matches
-                              e.g. "track" should not match "contract"
-
-          Short phrase        exact substring — fast, precise for well-known
-          (2–3 words):        fixed phrases like "sell your data"
-
-          Long phrase         proximity match — all words must appear within
-          (4+ words):         a 10-word window, in order. This handles legal
-                              paraphrasing like "share your personal data with
-                              advertisers" matching the keyword phrase
-                              "share your data with".
-
-        Why proximity for long phrases?
-          Legal documents paraphrase constantly. "share with advertisers"
-          becomes "share your personal data with advertisers". Exact substring
-          matching breaks on any intervening word. Proximity matching is more
-          robust while still requiring all the key words to be present.
-        """
         keyword = keyword.lower()
         words = keyword.split()
 
         if len(words) == 1:
-            # Single word — word boundary match
             pattern = r'\b' + re.escape(keyword) + r'\b'
             return bool(re.search(pattern, text_lower))
-
         elif len(words) <= 3:
-            # Short phrase — exact substring (fast, precise)
             return keyword in text_lower
-
         else:
-            # Long phrase — proximity match
             return self._proximity_match(words, text_lower, window=10)
 
     def _proximity_match(self, keyword_words: list[str], text_lower: str, window: int = 10) -> bool:
-        """
-        Checks whether all words in keyword_words appear in text_lower
-        within a sliding window of `window` words, in order.
-
-        Example:
-          keyword_words = ["share", "your", "data", "with"]
-          text = "share your personal data with advertisers"
-          window = 10
-          → True (all 4 words appear within 10 words of each other, in order)
-
-        Args:
-            keyword_words: List of words that must all appear in order
-            text_lower:    Lowercased clause text
-            window:        Max number of words allowed between first and last match
-        """
         text_words = text_lower.split()
         n = len(text_words)
         kw_count = len(keyword_words)
 
         for start in range(n - kw_count + 1):
-            segment = text_words[start: start + window]
-            ki = 0  # index into keyword_words
+            segment = text_words[start:start + window]
+            ki = 0
             for word in segment:
                 if ki < kw_count and word == keyword_words[ki]:
                     ki += 1
             if ki == kw_count:
                 return True
-
         return False
 
     def _is_negated(self, text_lower: str, matched_keywords: list[str]) -> bool:
-        """
-        Checks whether matched keywords appear in a negated context.
-
-        Two strategies:
-          1. Window check: look 10 words before each keyword for a negation signal
-          2. Sentence-start check: if the clause opens with a negation signal
-             (within first 6 words), treat the whole clause as negated.
-             This catches long sentences like "We do not sell... [13 words] ...
-             cross-context behavioral advertising" where the window misses it.
-        """
         words = text_lower.split()
 
-        # Strategy 2: sentence-start negation (catches long clauses)
         sentence_start = ' '.join(words[:6])
         for signal in NEGATION_SIGNALS:
             if signal in sentence_start:
                 return True
 
-        # Strategy 1: window before each keyword match
         for keyword in matched_keywords:
             keyword_lower = keyword.lower()
             keyword_words = keyword_lower.split()
@@ -282,31 +188,17 @@ class RuleBasedClassifier:
                 if words[i:i + n] == keyword_words:
                     window_start = max(0, i - NEGATION_WINDOW)
                     window = ' '.join(words[window_start:i])
-
                     for signal in NEGATION_SIGNALS:
                         if signal in window:
                             return True
         return False
 
     def _compute_confidence(self, matched_keywords: list[str], text_lower: str) -> float:
-        """
-        Estimates classification confidence for a match.
-
-        Factors:
-          - Keyword specificity: longer/more-word phrases are more specific
-          - Match count: more matching keywords = higher confidence
-          - Phrase density: what fraction of keywords in that level matched
-
-        Returns a float in [0.0, 1.0].
-        """
         if not matched_keywords:
             return 0.0
 
-        # Average word count of matched keywords (longer = more specific)
         avg_phrase_len = sum(len(kw.split()) for kw in matched_keywords) / len(matched_keywords)
-        specificity_score = min(avg_phrase_len / 5.0, 1.0)  # normalize, cap at 1
-
-        # Number of distinct keyword matches (more = more confident)
+        specificity_score = min(avg_phrase_len / 5.0, 1.0)
         match_count_score = min(len(matched_keywords) / 3.0, 1.0)
 
         confidence = 0.6 * specificity_score + 0.4 * match_count_score
