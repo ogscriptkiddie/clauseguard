@@ -45,15 +45,26 @@ except Exception as e:
     CLASSIFIER_MODE = "rule_based"
 
 # ── spaCy segmenter ────────────────────────────────────────────────────────────
+def _fallback_segmenter(text):
+    """Fallback segmenter when spaCy is unavailable."""
+    parts = re.split(r'\n{2,}|\n(?=\d+\.|\([a-z]\))', text)
+    return [p.strip() for p in parts if len(p.strip()) > 40]
+
 try:
-    from segmenter import segment_clauses
+    import segmenter as _seg_module
+    # Try multiple possible function names
+    segment_clauses = (
+        getattr(_seg_module, "segment_clauses", None) or
+        getattr(_seg_module, "segment", None) or
+        getattr(_seg_module, "segmentClauses", None) or
+        getattr(_seg_module, "get_clauses", None)
+    )
+    if segment_clauses is None:
+        raise AttributeError("No recognised segmenter function found in segmenter.py")
     logger.info("✅ spaCy segmenter loaded")
 except Exception as e:
     logger.warning(f"⚠️  spaCy segmenter unavailable ({e}), using fallback")
-    def segment_clauses(text):
-        """Simple fallback segmenter: split on double newlines or numbered items."""
-        parts = re.split(r'\n{2,}|\n(?=\d+\.|\([a-z]\))', text)
-        return [p.strip() for p in parts if len(p.strip()) > 40]
+    segment_clauses = _fallback_segmenter
 
 # ── Category metadata ──────────────────────────────────────────────────────────
 CATEGORY_META = {
@@ -250,7 +261,7 @@ def fetch_url():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    soup = BeautifulSoup(resp.text, "lxml")
+    soup = BeautifulSoup(resp.text, "html.parser")
 
     # Remove non-content elements
     for tag in soup(["script", "style", "nav", "header", "footer",
