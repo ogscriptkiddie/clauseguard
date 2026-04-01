@@ -179,7 +179,13 @@ def analyze():
 
     t0 = time.time()
     clauses = segment_clauses(text)
-    logger.info(f"Segmented into {len(clauses)} clauses")
+    # Cap clause count to prevent timeout on very large documents
+    CLAUSE_CAP = 300
+    if len(clauses) > CLAUSE_CAP:
+        logger.info(f"Segmented into {len(clauses)} clauses — capping at {CLAUSE_CAP}")
+        clauses = clauses[:CLAUSE_CAP]
+    else:
+        logger.info(f"Segmented into {len(clauses)} clauses")
 
     classified = []
     if CLASSIFIER_MODE == "hybrid" and classifier:
@@ -266,7 +272,16 @@ def fetch_url():
     except http_requests.exceptions.ConnectionError:
         return jsonify({"error": f"Could not connect to {url}"}), 502
     except http_requests.exceptions.HTTPError as e:
-        return jsonify({"error": f"HTTP {e.response.status_code}: {url}"}), 502
+        code = e.response.status_code
+        if code == 403:
+            return jsonify({"error": (
+                "This site blocks automated access (403). "
+                "Open the page in your browser, copy all the text, "
+                "then use the Paste Text tab instead."
+            )}), 422
+        if code == 404:
+            return jsonify({"error": f"Page not found (404): {url}"}), 422
+        return jsonify({"error": f"HTTP {code} error fetching {url}"}), 502
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
