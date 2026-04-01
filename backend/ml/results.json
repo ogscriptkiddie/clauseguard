@@ -1,82 +1,10 @@
 {
-  "group_cv_f1_macro_mean": 0.7166,
-  "group_cv_f1_macro_std": 0.0401,
+  "group_cv_f1_macro_mean": 0.7558,
+  "group_cv_f1_macro_std": 0.0422,
+  "n_samples": 754,
+  "n_clauseguard": 312,
+  "n_claudette": 446,
   "confidence_threshold": 0.6,
-  "n_samples": 312,
-  "n_classes": 7,
-  "n_folds": 5,
-  "cv_method": "GroupKFold (split by document \u2014 honest)",
-  "model": "TF-IDF(1-3gram,15k) + LR(C=1,balanced) + CalibratedClassifierCV(isotonic,cv=5)",
-  "top_features": {
-    "arbitration": [
-      "arbitration",
-      "class",
-      "dispute",
-      "you and",
-      "claims",
-      "individual",
-      "binding",
-      "court"
-    ],
-    "content_rights": [
-      "license",
-      "content",
-      "grant",
-      "feedback",
-      "license to",
-      "your content",
-      "worldwide",
-      "royalty free"
-    ],
-    "data_retention": [
-      "account",
-      "retain",
-      "your account",
-      "long",
-      "for",
-      "purposes",
-      "after",
-      "your"
-    ],
-    "data_sharing": [
-      "share",
-      "information with",
-      "information",
-      "may share",
-      "with",
-      "share your",
-      "companies",
-      "we may share"
-    ],
-    "liability_limitation": [
-      "liability",
-      "any",
-      "damages",
-      "warranties",
-      "implied",
-      "no",
-      "loss",
-      "warranty"
-    ],
-    "third_party_access": [
-      "third",
-      "third party",
-      "law enforcement",
-      "enforcement",
-      "party",
-      "parties",
-      "may",
-      "information"
-    ],
-    "tracking_profiling": [
-      "advertising",
-      "location",
-      "we use",
-      "ads",
-      "about",
-      "data",
-      "usage",
-      "device"
-    ]
-  }
+  "cv_method": "GroupKFold (split by document)",
+  "model": "TF-IDF(1-3gram,15k) + LR(C=1,balanced) + CalibratedClassifierCV(isotonic,cv=5)"
 }
