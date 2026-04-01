@@ -18,7 +18,7 @@ flagging the risks ordinary users never see before clicking "I Agree."*
 
 <br/>
 
-[![Dataset](https://img.shields.io/badge/Dataset-312%20Labeled%20Clauses-2563eb?style=flat-square)](data/annotated/)
+[![Dataset](https://img.shields.io/badge/Dataset-754%20Labeled%20Clauses-2563eb?style=flat-square)](data/annotated/)
 [![Rules](https://img.shields.io/badge/Classifier-757%20Rules%20%2B%20ML-7c3aed?style=flat-square)](backend/categories.py)
 [![Documents](https://img.shields.io/badge/Documents-21%20Processed-0891b2?style=flat-square)](data/raw/)
 [![Categories](https://img.shields.io/badge/Risk%20Categories-7-16a34a?style=flat-square)](backend/categories.py)
@@ -150,7 +150,7 @@ Trained on **312 human-labeled clauses** across **21 real platform documents**.
 | ![spaCy](https://img.shields.io/badge/-spaCy-09a3d5?style=flat-square) | spaCy NLP | Document → legal clause segmentation |
 | ![ML](https://img.shields.io/badge/-ML%20Classifier-2563eb?style=flat-square&logo=scikitlearn&logoColor=white) | TF-IDF + Logistic Regression + CalibratedClassifierCV | CV F1 Macro: 0.7646 |
 | ![Rules](https://img.shields.io/badge/-Rule%20Engine-7c3aed?style=flat-square) | Custom Python | 757-rule keyword classifier with negation detection |
-| ![Dataset](https://img.shields.io/badge/-Dataset-16a34a?style=flat-square) | CSV + Python | 312 human-labeled clauses across 21 real documents |
+| ![Dataset](https://img.shields.io/badge/-Dataset-16a34a?style=flat-square) | CSV + Python | 754 labeled clauses — 312 hand-annotated (ClauseGuard) + 446 from CLAUDETTE corpus (Drawzeski et al. 2021) |
 
 </div>
 
@@ -164,7 +164,7 @@ Trained on **312 human-labeled clauses** across **21 real platform documents**.
 |---|:---:|---|
 | **Phase 1** · Backend Engine | ✅ **Complete** | Flask API, spaCy segmenter, rule-based classifier (757 rules), risk scorer |
 | **Phase 2** · Extension + Dataset | ✅ **Complete** | MV3 extension, popup UI, badge alerts, SPA detection, 312-clause annotated dataset |
-| **Phase 3** · ML Classifier | ✅ **Complete** | TF-IDF + LR hybrid pipeline, CV F1=0.7646, +14.76pp over rule-based baseline |
+| **Phase 3** · ML Classifier | ✅ **Complete** | TF-IDF + LR hybrid pipeline, Group CV F1=0.7558, trained on 754 clauses (ClauseGuard + CLAUDETTE) |
 | **Phase 4** · Final Report | ✅ **Complete** | Precision/recall/F1/FPR evaluation, ML vs baseline comparison, technical report |
 
 </div>
@@ -360,7 +360,9 @@ clauseguard/
 
 ## 📚 Dataset
 
-The annotation dataset covers **312 human-labeled clauses** across **21 documents** from major platforms:
+The training dataset contains **754 labeled clauses** from two sources:
+
+### Source 1 — ClauseGuard Hand-Annotated Dataset (312 clauses)
 
 <div align="center">
 
@@ -370,11 +372,33 @@ The annotation dataset covers **312 human-labeled clauses** across **21 document
 | Spotify, Amazon, LinkedIn, DoorDash, Apple, Microsoft | Terms of Service |
 | Google, Coinbase, Disney+, Airbnb, TikTok, X/Twitter, Snapchat, Instagram | Terms of Service |
 
-**312 human-labeled clauses** · written justification on every label · ~35% override rate vs rule-based pre-labels · 7 risk categories
+</div>
+
+312 clauses annotated by Tanish Rathore using a **human-in-the-loop methodology**: the rule-based classifier pre-labeled each clause, then every label was independently reviewed and adjudicated — with a ~35% override rate. Written justification provided for every label.
+
+> ✅ Documents were selected to include platforms involved in real legal cases (McGinty v. Uber, Coinbase v. Suski, Kadrey v. Meta) to strengthen academic credibility.
+
+### Source 2 — CLAUDETTE Corpus (446 clauses)
+
+<div align="center">
+
+| Category mapped | CLAUDETTE tag | Clauses |
+|---|---|---|
+| liability_limitation | `<ltd>` | 218 |
+| data_retention | `<ter>` | 92 |
+| arbitration | `<a>`, `<j>` | 88 |
+| content_rights | `<cr>` | 48 |
 
 </div>
 
-> ✅ **TikTok ToS** (10 clauses), **Coinbase** (9 clauses, Coinbase v. Suski), and **Airbnb** (17 clauses, arbitration analysis) were sourced from platforms with real legal case significance to strengthen dataset credibility.
+446 English clauses extracted from the **CLAUDETTE multilingual corpus** (Drawzeski et al., 2021), covering 25 Terms of Service documents from platforms including Uber, Spotify, LinkedIn, Snapchat, Google, Facebook, Dropbox, Tinder, and others. Expert-annotated by legal researchers at the University of Bologna.
+
+**Full citation:**
+> Drawzeski, K., Galassi, A., Jablonowska, A., Lagioia, F., Lippi, M., Micklitz, H.W., Sartor, G., Tagiuri, G., & Torroni, P. (2021). A Corpus for Multilingual Analysis of Online Terms of Service. *Proceedings of the Natural Legal Language Processing Workshop 2021 (NLLP@EMNLP)*, 1–8. https://aclanthology.org/2021.nllp-1.1
+
+**Hugging Face:** `joelniklaus/online_terms_of_service`
+
+> **Note:** The CLAUDETTE corpus is used strictly for research and educational purposes under academic fair use. All credit for the CLAUDETTE annotations belongs to the original authors (Drawzeski et al. 2021 and the broader CLAUDETTE project team at the University of Bologna). ClauseGuard's novel contribution is the privacy-specific categories (`data_sharing`, `tracking_profiling`, `third_party_access`) which do not exist in the CLAUDETTE schema.
 
 ---
 
@@ -385,9 +409,11 @@ Built as a **capstone security research project** at **Simon Fraser University**
 ClauseGuard sits at the intersection of NLP, cybersecurity risk modeling, and privacy rights — treating legal document analysis as a **defensive security problem** rather than a legal one. The goal is to surface the risks that ordinary users agree to every day without realising it.
 
 The 7-category schema is grounded in:
-- **CLAUDETTE** (Lippi et al., 2019) — academic baseline for unfair contract clause detection
-- **PIPEDA / GDPR** — privacy law frameworks defining what requires user consent
-- Patterns observed across 21 real platform documents
+- **CLAUDETTE** (Lippi et al., 2019; Drawzeski et al., 2021) — academic baseline for unfair contract clause detection in ToS. ClauseGuard extends CLAUDETTE's schema with three privacy-specific categories (`data_sharing`, `tracking_profiling`, `third_party_access`) not present in the original work.
+- **PIPEDA / GDPR** — Canadian and EU privacy law frameworks defining what requires informed user consent
+- Patterns observed across 21 real platform documents including legally significant cases
+
+**CLAUDETTE project:** https://claudette.eui.eu/ — University of Bologna, European University Institute
 
 ---
 
