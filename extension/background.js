@@ -4,6 +4,9 @@
  * - Shows a red "!" badge on the extension icon when ToS is detected
  * - Clears the badge when the user opens the popup
  * - Relays page text requests from popup.js to content.js
+ *
+ * v2 — Re-injects content.js if the context is stale (fixes Meta/SPAs where
+ *      the content script context is invalidated after client-side navigation).
  */
 
 // Clear badge when popup opens (user has seen the alert)
@@ -17,7 +20,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "signupDetected") {
     const tabId = sender.tab.id;
 
-    // Store detection state
     chrome.storage.session.set({
       [`signup_${tabId}`]: {
         url:      message.url,
@@ -26,7 +28,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     });
 
-    // Red badge with "!" on the extension icon
     chrome.action.setBadgeText({ text: "!", tabId });
     chrome.action.setBadgeBackgroundColor({ color: "#e74c3c", tabId });
     chrome.action.setTitle({
@@ -37,15 +38,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Relay text extraction request from popup.js → content.js
   if (message.action === "getPageText") {
-    chrome.tabs.sendMessage(message.tabId, { action: "extractText" }, (response) => {
-      // Clear badge once user actively scans
-      chrome.action.setBadgeText({ text: "", tabId: message.tabId });
-      chrome.action.setTitle({
-        tabId: message.tabId,
-        title: "ClauseGuard — Analyze this page"
-      });
-      sendResponse(response);
+    const tabId = message.tabId;
+
+    // Helper: clear badge after a successful scan
+    function clearBadge() {
+      chrome.action.setBadgeText({ text: "", tabId });
+      chrome.action.setTitle({ tabId, title: "ClauseGuard — Analyze this page" });
+    }
+
+    // First attempt — send to existing content script context
+    chrome.tabs.sendMessage(tabId, { action: "extractText" }, (response) => {
+
+      // ── Happy path ───────────────────────────────────────────────────────
+      if (!chrome.runtime.lastError && response) {
+        clearBadge();
+        sendResponse(response);
+        return;
+      }
+
+      // ── Stale context (SPA navigation, Meta, etc.) ───────────────────────
+      // Content script context was invalidated. Re-inject content.js and retry.
+      const lastErr = chrome.runtime.lastError?.message || "unknown";
+      console.warn(`[ClauseGuard] Content script stale (${lastErr}) — re-injecting…`);
+
+      chrome.scripting.executeScript(
+        { target: { tabId }, files: ["content.js"] },
+        () => {
+          if (chrome.runtime.lastError) {
+            // Can't inject — probably a chrome:// or other restricted page
+            sendResponse({
+              success: false,
+              error: "Cannot inject on this page: " + chrome.runtime.lastError.message,
+            });
+            return;
+          }
+
+          // Give the freshly injected script ~600ms to initialize
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabId, { action: "extractText" }, (retryResponse) => {
+              // Always read lastError to prevent "unchecked" warning
+              void chrome.runtime.lastError;
+              clearBadge();
+              sendResponse(
+                retryResponse || {
+                  success: false,
+                  error: "Content script did not respond after re-injection.",
+                }
+              );
+            });
+          }, 600);
+        }
+      );
     });
-    return true;
+
+    return true; // keeps message channel open for async sendResponse
   }
 });
