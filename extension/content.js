@@ -169,7 +169,7 @@ async function expandAllDisclosures() {
 
   // Wait for React/Vue re-renders and CSS transitions to complete
   if (clickCount > 0 || document.querySelectorAll('details').length > 0) {
-    await new Promise(r => setTimeout(r, 700));
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return clickCount; // returned for debug logging
@@ -178,20 +178,44 @@ async function expandAllDisclosures() {
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
 
-// Now async — expands disclosures first, then extracts
+// Async extraction — expands hidden content first, then extracts.
+// Always calls sendResponse via timeout fallback so the port never closes silently.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "extractText") {
+
+    // Safety net: if async path takes too long or throws without catching,
+    // fall back to immediate synchronous extraction so popup always gets a response.
+    let responded = false;
+    const fallbackTimer = setTimeout(() => {
+      if (!responded) {
+        responded = true;
+        try {
+          sendResponse({ success: true, text: extractPageText(), url: window.location.href, expanded: 0 });
+        } catch(e) {
+          sendResponse({ success: false, error: 'Extraction timed out' });
+        }
+      }
+    }, 7000);
+
     expandAndExtract()
       .then(({ text, expanded }) => {
-        sendResponse({
-          success:  true,
-          text,
-          url:      window.location.href,
-          expanded, // number of accordions clicked — useful for popup debug info
-        });
+        if (!responded) {
+          responded = true;
+          clearTimeout(fallbackTimer);
+          sendResponse({ success: true, text, url: window.location.href, expanded });
+        }
       })
       .catch(err => {
-        sendResponse({ success: false, error: err.message });
+        if (!responded) {
+          responded = true;
+          clearTimeout(fallbackTimer);
+          // Expansion failed — fall back to synchronous extraction
+          try {
+            sendResponse({ success: true, text: extractPageText(), url: window.location.href, expanded: 0 });
+          } catch(e2) {
+            sendResponse({ success: false, error: err.message || 'Extraction failed' });
+          }
+        }
       });
   }
   return true; // keeps message channel open for async sendResponse
