@@ -24,6 +24,7 @@ ml/models/*.joblib
 # Keep annotated CSVs in git, but not raw scraped HTML
 data/raw/*.html
 data/raw/*.htm
+backend/ml/claudette_extracted.csv
 
 # ─── IDE / OS ─────────────────────────────────────────────────────────────────
 .vscode/
