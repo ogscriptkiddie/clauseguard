@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>ClauseGuard — Legal Risk Intelligence</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 38'%3E%3Cpath d='M17 1L32 9V22C32 30 17 37 17 37C17 37 2 30 2 22V9L17 1Z' fill='%23EDE7DC' stroke='%23C41E1E' stroke-width='1.2'/%3E%3Cpath d='M17 4L30 11V22C30 28.5 17 35 17 35C17 35 4 28.5 4 22V11L17 4Z' fill='none' stroke='%23C41E1E' stroke-width='.4' opacity='.35'/%3E%3Cpath d='M20.5 13.5C18.8 12.4 16.2 12.7 14.5 14.4C12.8 16.1 12.8 19 14.5 20.7C16.2 22.4 18.8 22.7 20.5 21.5' stroke='%23C41E1E' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3Cline x1='20.5' y1='17.5' x2='17' y2='17.5' stroke='%23C41E1E' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;0,900;1,400;1,700;1,900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..500&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
@@ -142,8 +143,9 @@ nav.scrolled{
   background:var(--red);opacity:.3;
 }
 .hero-h1 .h1-ghost{
-  -webkit-text-stroke:1.5px var(--parchment4);
+  -webkit-text-stroke:2px var(--red);
   color:transparent;
+  opacity:.55;
 }
 
 .hero-sub{
@@ -209,28 +211,48 @@ nav.scrolled{
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
 
 /* ── TICKER ───────────────────────────────────────────── */
-.ticker-band{
-  background:var(--red);
-  overflow:hidden;
-  white-space:nowrap;
-  padding:12px 0;
+/* ── EVIDENCE STRIP ───────────────────────────────────── */
+.evidence-strip{
+  background:var(--ink);
+  padding:20px 64px;
   position:relative;z-index:2;
-  border-top:1px solid var(--red2);
-  border-bottom:1px solid var(--red2);
+  overflow:hidden;
 }
-.ticker-inner{
-  display:inline-block;
-  animation:ticker 50s linear infinite;
-  font-family:'DM Mono',monospace;
-  font-size:10.5px;
-  letter-spacing:2px;
-  text-transform:uppercase;
-  color:rgba(255,255,255,.75);
+.evidence-strip::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(
+    90deg,
+    rgba(255,255,255,.015) 0px,
+    rgba(255,255,255,.015) 1px,
+    transparent 1px,
+    transparent 60px
+  );
+  pointer-events:none;
 }
-.ticker-inner strong{color:rgba(255,255,255,1);font-weight:500}
-.ticker-sep{margin:0 20px;color:rgba(255,255,255,.35)}
-@keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.ticker-band:hover .ticker-inner{animation-play-state:paused}
+.evidence-inner{
+  max-width:1200px;margin:0 auto;
+  display:flex;align-items:center;gap:8px;
+  flex-wrap:wrap;
+}
+.ev-label{
+  font-family:'DM Mono',monospace;font-size:8.5px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.2);
+  margin-right:8px;flex-shrink:0;
+}
+.ev-pill{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:1.2px;text-transform:uppercase;
+  color:rgba(255,255,255,.45);
+  border:1px solid rgba(255,255,255,.1);
+  padding:5px 12px;
+  white-space:nowrap;
+  transition:color .2s,border-color .2s,background .2s;
+}
+.ev-pill:hover{color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.04)}
+.ev-pill.high{color:rgba(196,30,30,.8);border-color:rgba(196,30,30,.25);background:rgba(196,30,30,.05)}
+.ev-pill.high:hover{color:var(--red);border-color:rgba(196,30,30,.5)}
+@media(max-width:768px){.evidence-strip{padding:16px 24px}}
 
 /* ── REVEAL ───────────────────────────────────────────── */
 .reveal{opacity:0;transform:translateY(24px);transition:opacity .65s var(--ease),transform .65s var(--ease)}
@@ -801,25 +823,19 @@ footer{
   </div>
 </section>
 
-<!-- TICKER -->
-<div class="ticker-band">
-  <div class="ticker-inner">
-    <strong>We may sell your personal data</strong><span class="ticker-sep">·</span>
-    Binding arbitration required<span class="ticker-sep">·</span>
-    <strong>Class action waiver</strong><span class="ticker-sep">·</span>
-    Maximum liability: $10.00<span class="ticker-sep">·</span>
-    <strong>Perpetual irrevocable license over your content</strong><span class="ticker-sep">·</span>
-    We retain your data indefinitely<span class="ticker-sep">·</span>
-    <strong>You waive your right to a jury trial</strong><span class="ticker-sep">·</span>
-    We infer your income, age and political views<span class="ticker-sep">·</span>
-    <strong>We may sell your personal data</strong><span class="ticker-sep">·</span>
-    Binding arbitration required<span class="ticker-sep">·</span>
-    <strong>Class action waiver</strong><span class="ticker-sep">·</span>
-    Maximum liability: $10.00<span class="ticker-sep">·</span>
-    <strong>Perpetual irrevocable license over your content</strong><span class="ticker-sep">·</span>
-    We retain your data indefinitely<span class="ticker-sep">·</span>
-    <strong>You waive your right to a jury trial</strong><span class="ticker-sep">·</span>
-    We infer your income, age and political views<span class="ticker-sep">·</span>
+<!-- EVIDENCE STRIP -->
+<div class="evidence-strip">
+  <div class="evidence-inner">
+    <span class="ev-label">Found in real ToS →</span>
+    <span class="ev-pill high">Sell your personal data</span>
+    <span class="ev-pill high">Binding arbitration</span>
+    <span class="ev-pill high">Class action waiver</span>
+    <span class="ev-pill high">Liability capped at $10</span>
+    <span class="ev-pill high">Perpetual content license</span>
+    <span class="ev-pill">Indefinite data retention</span>
+    <span class="ev-pill">Jury trial waiver</span>
+    <span class="ev-pill">Infers income &amp; politics</span>
+    <span class="ev-pill">No deletion guarantee</span>
   </div>
 </div>
 
@@ -1026,7 +1042,8 @@ window.addEventListener('scroll',()=>{
 });
 
 /* ═══════════════════════════════════════════════════════
-   THREE.JS — HERO NEURAL NETWORK BACKGROUND
+   THREE.JS — HERO DOT GRID (ink wave on cream)
+   Animated dot matrix with wave distortion + red flagged nodes
 ═══════════════════════════════════════════════════════ */
 (function(){
   const canvas=document.getElementById('hero-canvas');
@@ -1034,91 +1051,81 @@ window.addEventListener('scroll',()=>{
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.setClearColor(0x000000,0);
   const scene=new THREE.Scene();
-  const camera=new THREE.PerspectiveCamera(60,1,0.1,100);
-  camera.position.z=28;
+  const camera=new THREE.PerspectiveCamera(52,1,0.1,100);
+  camera.position.z=22;
 
   function resize(){
     const w=canvas.parentElement.clientWidth,h=canvas.parentElement.clientHeight||window.innerHeight;
-    renderer.setSize(w,h);
-    camera.aspect=w/h;
-    camera.updateProjectionMatrix();
+    renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
   }
-  resize();
-  window.addEventListener('resize',resize);
+  resize();window.addEventListener('resize',resize);
 
-  // Create particle nodes
-  const N=180;
-  const positions=[];
-  for(let i=0;i<N;i++){
-    positions.push({
-      x:(Math.random()-.5)*40,
-      y:(Math.random()-.5)*24,
-      z:(Math.random()-.5)*20,
-      vx:(Math.random()-.5)*.006,
-      vy:(Math.random()-.5)*.006,
-      vz:(Math.random()-.5)*.003,
-    });
+  /* Dot grid */
+  const COLS=52,ROWS=32,TOTAL=COLS*ROWS;
+  const spacing=0.78;
+  const posArr=new Float32Array(TOTAL*3);
+  const colArr=new Float32Array(TOTAL*3);
+  const baseX=new Float32Array(TOTAL),baseY=new Float32Array(TOTAL);
+  // ~4% red flagged nodes, rest ink
+  const flagged=new Uint8Array(TOTAL);
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const i=r*COLS+c;
+      const x=(c-COLS/2)*spacing;
+      const y=(r-ROWS/2)*spacing;
+      baseX[i]=x;baseY[i]=y;
+      posArr[i*3]=x;posArr[i*3+1]=y;posArr[i*3+2]=0;
+      flagged[i]=Math.random()<.04?1:0;
+      if(flagged[i]){
+        colArr[i*3]=0.77;colArr[i*3+1]=0.12;colArr[i*3+2]=0.12; // red
+      } else {
+        colArr[i*3]=0.10;colArr[i*3+1]=0.09;colArr[i*3+2]=0.08; // ink
+      }
+    }
   }
 
-  // Points geometry
-  const ptGeo=new THREE.BufferGeometry();
-  const ptPos=new Float32Array(N*3);
-  ptGeo.setAttribute('position',new THREE.BufferAttribute(ptPos,3));
-  const ptMat=new THREE.PointsMaterial({color:0xC4B8A8,size:0.10,transparent:true,opacity:.4});
-  scene.add(new THREE.Points(ptGeo,ptMat));
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(posArr,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(colArr,3));
 
-  // Lines
-  const maxLines=300;
-  const lineGeo=new THREE.BufferGeometry();
-  const linePos=new Float32Array(maxLines*6);
-  lineGeo.setAttribute('position',new THREE.BufferAttribute(linePos,3));
-  lineGeo.setDrawRange(0,0);
-  const lineMat=new THREE.LineSegments(lineGeo,new THREE.LineBasicMaterial({color:0xD4C8B8,transparent:true,opacity:.3}));
-  scene.add(lineMat);
+  const mat=new THREE.PointsMaterial({
+    size:0.07,vertexColors:true,
+    transparent:true,opacity:0.45,
+    sizeAttenuation:true
+  });
+  scene.add(new THREE.Points(geo,mat));
 
-  // Axis-aligned subtle fog
-  scene.fog=new THREE.FogExp2(0xF4F0E8,0.014);
+  /* Subtle fog matching parchment */
+  scene.fog=new THREE.FogExp2(0xF4F0E8,0.016);
 
   let t=0,mx=0,my=0;
-  document.addEventListener('mousemove',e=>{mx=(e.clientX/window.innerWidth-.5)*2;my=(e.clientY/window.innerHeight-.5)*2});
+  document.addEventListener('mousemove',e=>{
+    mx=(e.clientX/window.innerWidth-.5)*2;
+    my=(e.clientY/window.innerHeight-.5)*2;
+  });
 
   function animate(){
     requestAnimationFrame(animate);
-    t+=0.004;
+    t+=0.007;
+    const pos=geo.attributes.position;
 
-    // Move particles
-    for(let i=0;i<N;i++){
-      const p=positions[i];
-      p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
-      if(Math.abs(p.x)>20)p.vx*=-1;
-      if(Math.abs(p.y)>12)p.vy*=-1;
-      if(Math.abs(p.z)>10)p.vz*=-1;
-      ptPos[i*3]=p.x;ptPos[i*3+1]=p.y;ptPos[i*3+2]=p.z;
+    for(let i=0;i<TOTAL;i++){
+      const x=baseX[i],y=baseY[i];
+      // Slow rolling wave
+      const wave=Math.sin(x*0.35+t)*Math.cos(y*0.28+t*0.6)*0.55;
+      // Mouse proximity ripple
+      const dx=x-mx*14,dy=y-my*9;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const ripple=Math.sin(dist*0.7-t*4)*0.18*Math.exp(-dist*0.1);
+      pos.setZ(i,wave+ripple);
+      // Flagged nodes pulse slightly in opacity-like scale via Z
+      if(flagged[i]) pos.setZ(i,pos.getZ(i)+Math.sin(t*3+i)*0.12);
     }
-    ptGeo.attributes.position.needsUpdate=true;
+    pos.needsUpdate=true;
 
-    // Connect nearby nodes
-    let lc=0;
-    const DIST=8;
-    for(let i=0;i<N&&lc<maxLines;i++){
-      for(let j=i+1;j<N&&lc<maxLines;j++){
-        const dx=positions[i].x-positions[j].x;
-        const dy=positions[i].y-positions[j].y;
-        const dz=positions[i].z-positions[j].z;
-        const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
-        if(d<DIST){
-          linePos[lc*6]=positions[i].x;linePos[lc*6+1]=positions[i].y;linePos[lc*6+2]=positions[i].z;
-          linePos[lc*6+3]=positions[j].x;linePos[lc*6+4]=positions[j].y;linePos[lc*6+5]=positions[j].z;
-          lc++;
-        }
-      }
-    }
-    lineGeo.attributes.position.needsUpdate=true;
-    lineGeo.setDrawRange(0,lc*2);
-
-    // Camera drift + mouse parallax
-    camera.position.x=Math.sin(t*.15)*3+mx*1.5;
-    camera.position.y=Math.cos(t*.12)*1.5-my*1.5;
+    camera.position.x=mx*0.6;
+    camera.position.y=-my*0.4;
     camera.lookAt(0,0,0);
     renderer.render(scene,camera);
   }
@@ -1126,10 +1133,10 @@ window.addEventListener('scroll',()=>{
 })();
 
 /* ═══════════════════════════════════════════════════════
-   THREE.JS — 3D RISK BAR RING
-   7 bars in a circle — one per category
-   Height = risk score, Depth = weight, Color = risk level
-   Reacts to every analysis run
+   THREE.JS — RISK CONSTELLATION
+   7 spheres, one per risk category. Neutral until analysis
+   fires — then each sphere blooms to its risk color + scale.
+   Connected by a thin risk web. Camera slow-orbits.
 ═══════════════════════════════════════════════════════ */
 (function(){
   const canvas = document.getElementById('model-canvas');
@@ -1137,173 +1144,178 @@ window.addEventListener('scroll',()=>{
 
   const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer.setClearColor(0x000000, 0);
-  renderer.shadowMap.enabled = true;
+  renderer.setClearColor(0x000000,0);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
-  camera.position.set(0, 3.5, 9);
-  camera.lookAt(0, 0.5, 0);
+  const camera = new THREE.PerspectiveCamera(44,1,0.1,100);
+  camera.position.set(0,0,9);
 
-  /* ── Category metadata ── */
+  /* Category definitions */
   const CATS = [
-    {key:'data_sharing',         label:'Data Sharing',   weight:0.22},
-    {key:'tracking_profiling',   label:'Tracking',       weight:0.20},
-    {key:'third_party_access',   label:'3rd Party',      weight:0.13},
-    {key:'data_retention',       label:'Retention',      weight:0.13},
-    {key:'arbitration',          label:'Arbitration',    weight:0.13},
-    {key:'content_rights',       label:'Content',        weight:0.10},
-    {key:'liability_limitation', label:'Liability',      weight:0.09},
+    {key:'data_sharing'},
+    {key:'tracking_profiling'},
+    {key:'third_party_access'},
+    {key:'data_retention'},
+    {key:'arbitration'},
+    {key:'content_rights'},
+    {key:'liability_limitation'},
   ];
 
-  const N      = CATS.length;
-  const RADIUS = 2.7;
-  const C_NEUTRAL = 0xD6CEBF;
-  const C_RISK    = {HIGH:0xC41E1E, MEDIUM:0xB45309, LOW:0x166534, NONE:0xD6CEBF};
+  const C_NEUTRAL = new THREE.Color(0xC8C0B4);
+  const C_RISK = {
+    HIGH:   new THREE.Color(0xC41E1E),
+    MEDIUM: new THREE.Color(0xB45309),
+    LOW:    new THREE.Color(0x166534),
+    NONE:   new THREE.Color(0xC8C0B4),
+  };
 
-  /* ── Build bars ── */
-  const barGroup = new THREE.Group();
-  scene.add(barGroup);
-  const bars = [];
+  /* 3D positions — rough sphere surface scatter */
+  const POS = [
+    [ 0.0,  2.0,  0.3],
+    [ 1.7,  0.9, -0.5],
+    [ 1.9, -0.5,  0.4],
+    [ 0.4, -1.9,  0.1],
+    [-0.6, -1.9, -0.3],
+    [-1.9, -0.5,  0.4],
+    [-1.7,  0.9, -0.5],
+  ];
 
-  CATS.forEach((cat, i) => {
-    const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
-    const x = Math.cos(angle) * RADIUS;
-    const z = Math.sin(angle) * RADIUS;
+  /* Build spheres */
+  const spheres = [];
+  CATS.forEach((cat,i)=>{
+    const [x,y,z] = POS[i];
 
-    // Width constant, depth = weight (thicker = more important)
-    const bW = 0.52;
-    const bD = 0.28 + cat.weight * 1.8;
-
-    const geo = new THREE.BoxGeometry(bW, 1, bD);
+    const geo = new THREE.SphereGeometry(0.30,28,28);
     const mat = new THREE.MeshPhongMaterial({
-      color: C_NEUTRAL,
-      emissive: 0x000000,
-      shininess: 30,
+      color: C_NEUTRAL.clone(),
+      emissive: new THREE.Color(0x000000),
+      emissiveIntensity: 0,
+      shininess: 70,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.88,
     });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = new THREE.Mesh(geo,mat);
+    mesh.position.set(x,y,z);
+    scene.add(mesh);
 
-    // Face the center of the ring
-    const lookTarget = new THREE.Vector3(0, 0.5, 0);
-    mesh.lookAt(lookTarget);
-    mesh.position.set(x, 0.1, z);
-    barGroup.add(mesh);
+    /* Spinning halo ring */
+    const rGeo = new THREE.TorusGeometry(0.42,0.014,8,52);
+    const rMat = new THREE.MeshBasicMaterial({color:C_NEUTRAL.clone(),transparent:true,opacity:0.20});
+    const ring = new THREE.Mesh(rGeo,rMat);
+    ring.position.set(x,y,z);
+    ring.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,0);
+    scene.add(ring);
 
-    // Top cap — thin slab that glows
-    const capGeo = new THREE.BoxGeometry(bW + 0.04, 0.06, bD + 0.04);
-    const capMat = new THREE.MeshPhongMaterial({color: C_NEUTRAL, emissive: C_NEUTRAL, emissiveIntensity:0, transparent:true, opacity:.95});
-    const cap = new THREE.Mesh(capGeo, capMat);
-    barGroup.add(cap);
-
-    bars.push({
-      mesh, mat, cap, capMat,
-      x, z,
-      angle,
-      targetH: 0.18,
-      currentH: 0.18,
+    spheres.push({
+      mesh,mat,ring,rMat,
+      x,y,z,
+      phase: i*(Math.PI*2/7),
       key: cat.key,
-      riskLevel: 'NONE',
+      targetColor: C_NEUTRAL.clone(),
+      targetScale: 1.0,
+      currentScale: 1.0,
     });
   });
 
-  /* ── Base ring ── */
-  const ringGeo = new THREE.TorusGeometry(RADIUS, 0.025, 8, 64);
-  scene.add(new THREE.Mesh(ringGeo,
-    new THREE.MeshBasicMaterial({color:0xD6CEBF, transparent:true, opacity:0.35})));
-
-  /* ── Ground plane (faint) ── */
-  const floorGeo = new THREE.CylinderGeometry(RADIUS + 0.5, RADIUS + 0.5, 0.01, 48);
-  scene.add(new THREE.Mesh(floorGeo,
-    new THREE.MeshBasicMaterial({color:0xEDE7DC, transparent:true, opacity:0.25})));
-
-  /* ── Lighting ── */
-  scene.add(new THREE.AmbientLight(0xF4EDE0, 2.2));
-  const sun = new THREE.DirectionalLight(0xFFFFFF, 1.4);
-  sun.position.set(4, 8, 4);
-  scene.add(sun);
-  // Dynamic accent light — brightens when high risk detected
-  const accentLight = new THREE.PointLight(0xC41E1E, 0, 12);
-  accentLight.position.set(-3, 3, 2);
-  scene.add(accentLight);
-
-  /* ── Resize handling ── */
-  function resize() {
-    const w = canvas.offsetWidth  || canvas.parentElement.clientWidth  || 300;
-    const h = canvas.offsetHeight || canvas.parentElement.clientHeight || 240;
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-  }
-  const ro = new ResizeObserver(() => resize());
-  ro.observe(canvas.parentElement);
-  setTimeout(resize, 100);
-  window.addEventListener('resize', resize);
-
-  /* ── Public API — called from render() after analysis ── */
-  window.updateRiskViz = function(categoryScores) {
-    if(!categoryScores) return;
-    let maxRisk = 'NONE';
-    const order = ['HIGH','MEDIUM','LOW','NONE'];
-
-    bars.forEach(bar => {
-      const s = categoryScores[bar.key];
-      if(!s) return;
-
-      const rl  = s.max_risk_level || 'NONE';
-      const scr = s.score || 0;
-
-      bar.riskLevel = rl;
-      // Map 0-100 score → 0.18–4.2 bar height
-      bar.targetH = 0.18 + (scr / 100) * 4.0;
-
-      // Update colors
-      const col = C_RISK[rl] || C_RISK.NONE;
-      bar.mat.color.setHex(col);
-      bar.capMat.color.setHex(col);
-      bar.capMat.emissive.setHex(rl === 'NONE' ? 0x000000 : col);
-      bar.capMat.emissiveIntensity = rl === 'HIGH' ? 0.5 : rl === 'MEDIUM' ? 0.25 : 0;
-
-      if(order.indexOf(rl) < order.indexOf(maxRisk)) maxRisk = rl;
-    });
-
-    // Accent light intensity based on worst risk
-    accentLight.color.setHex(C_RISK[maxRisk] || C_RISK.NONE);
-    accentLight.intensity = maxRisk === 'HIGH' ? 0.9 : maxRisk === 'MEDIUM' ? 0.5 : 0;
-  };
-
-  // Backward compat — old call
-  window.setModelRisk = function(){};
-
-  /* ── Animation loop ── */
-  let t = 0;
-  function animate() {
-    requestAnimationFrame(animate);
-    t += 0.004;
-
-    barGroup.rotation.y = t * 0.25;
-
-    bars.forEach(bar => {
-      // Smooth height transition
-      if(Math.abs(bar.currentH - bar.targetH) > 0.005) {
-        bar.currentH += (bar.targetH - bar.currentH) * 0.04;
-      }
-      const h = bar.currentH;
-      bar.mesh.scale.y = h;
-      bar.mesh.position.set(bar.x, h * 0.5, bar.z);
-      // Cap sits on top of bar
-      bar.cap.position.set(bar.x, h + 0.03, bar.z);
-      bar.cap.rotation.y = bar.mesh.rotation.y;
-    });
-
-    // Subtle pulse on accent light
-    if(accentLight.intensity > 0) {
-      accentLight.intensity = accentLight.intensity * 0.98 + 
-        (0.6 + Math.sin(t * 3) * 0.15) * 0.02;
+  /* Web of connecting lines */
+  const lineMats = [];
+  for(let i=0;i<7;i++){
+    for(let j=i+1;j<7;j++){
+      const pts=[new THREE.Vector3(...POS[i]),new THREE.Vector3(...POS[j])];
+      const lMat=new THREE.LineBasicMaterial({color:0xC8C0B4,transparent:true,opacity:0.13});
+      scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),lMat));
+      lineMats.push(lMat);
     }
+  }
 
-    renderer.render(scene, camera);
+  /* Central core — tiny icosahedron */
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.22,1),
+    new THREE.MeshPhongMaterial({color:0xD6CEBF,transparent:true,opacity:0.55,wireframe:false})
+  );
+  scene.add(core);
+
+  /* Lighting */
+  scene.add(new THREE.AmbientLight(0xF4EDE0,2.8));
+  const keyLight = new THREE.DirectionalLight(0xFFFFFF,1.5);
+  keyLight.position.set(5,7,5);
+  scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0xC41E1E,0,16);
+  fillLight.position.set(-4,2,3);
+  scene.add(fillLight);
+
+  /* Resize */
+  function resize(){
+    const w=canvas.offsetWidth||canvas.parentElement.clientWidth||300;
+    const h=canvas.offsetHeight||canvas.parentElement.clientHeight||240;
+    renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  }
+  const roObs=new ResizeObserver(()=>resize());
+  roObs.observe(canvas.parentElement);
+  setTimeout(resize,100);
+  window.addEventListener('resize',resize);
+
+  /* Public API */
+  window.updateRiskViz = function(categoryScores){
+    if(!categoryScores) return;
+    const order=['HIGH','MEDIUM','LOW','NONE'];
+    let maxRisk='NONE';
+    spheres.forEach(s=>{
+      const cat=categoryScores[s.key];
+      if(!cat) return;
+      const rl=cat.max_risk_level||'NONE';
+      const scr=cat.score||0;
+      s.targetColor=(C_RISK[rl]||C_RISK.NONE).clone();
+      s.targetScale=0.85+(scr/100)*1.1;
+      if(order.indexOf(rl)<order.indexOf(maxRisk)) maxRisk=rl;
+    });
+    fillLight.color.copy(C_RISK[maxRisk]||C_RISK.NONE);
+    fillLight.intensity = maxRisk==='HIGH'?1.4 : maxRisk==='MEDIUM'?0.7 : 0;
+    lineMats.forEach(m=>{ m.opacity = maxRisk==='NONE'?0.13:0.30; });
+  };
+  window.setModelRisk=function(){};
+
+  /* Animation */
+  let t=0;
+  function animate(){
+    requestAnimationFrame(animate);
+    t+=0.005;
+
+    spheres.forEach((s,i)=>{
+      /* Float gently */
+      s.mesh.position.y = s.y + Math.sin(t*0.85+s.phase)*0.10;
+      s.ring.position.y = s.mesh.position.y;
+
+      /* Color lerp */
+      s.mat.color.lerp(s.targetColor,0.035);
+      s.rMat.color.lerp(s.targetColor,0.035);
+
+      /* Emissive glow */
+      const isHigh  = s.targetColor.r > 0.6 && s.targetColor.g < 0.3;
+      const isMid   = s.targetColor.r > 0.5 && s.targetColor.g > 0.3;
+      const tEmit   = isHigh ? 0.38 : isMid ? 0.20 : 0;
+      s.mat.emissive.lerp(s.targetColor,0.04);
+      s.mat.emissiveIntensity += (tEmit - s.mat.emissiveIntensity)*0.04;
+
+      /* Scale */
+      s.currentScale += (s.targetScale - s.currentScale)*0.05;
+      s.mesh.scale.setScalar(s.currentScale);
+
+      /* Ring rotation */
+      s.ring.rotation.x += 0.005 + i*0.0004;
+      s.ring.rotation.z += 0.003 + i*0.0003;
+    });
+
+    /* Core pulse */
+    core.rotation.y = t*0.4;
+    core.rotation.x = t*0.25;
+
+    /* Slow camera orbit */
+    camera.position.x = Math.sin(t*0.20)*1.4;
+    camera.position.y = Math.cos(t*0.14)*0.7;
+    camera.lookAt(0,0,0);
+
+    renderer.render(scene,camera);
   }
   animate();
 })();
