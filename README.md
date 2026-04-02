@@ -426,7 +426,7 @@ The 7-category schema is grounded in:
 *Security Researcher · Simon Fraser University · MSP Security Technician*
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-2563eb?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/tanish-rathore)
-[![Portfolio](https://img.shields.io/badge/Portfolio-Visit-7c3aed?style=for-the-badge&logo=github&logoColor=white)](https://ogscriptkiddie.github.io/personal_portfolio/)
+[![Portfolio](https://img.shields.io/badge/Portfolio-Visit-7c3aed?style=for-the-badge&logo=github&logoColor=white)](https://tanishr.dev)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-171717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ogscriptkiddie)
 
 </div>
