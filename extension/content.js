@@ -68,12 +68,19 @@ function detectTosPage() {
 
   if (shouldAlert && url !== lastDetectedUrl) {
     lastDetectedUrl = url;
-    chrome.runtime.sendMessage({
-      action:   "signupDetected",
-      url:      window.location.href,
-      tosUrl:   findTosLink(),
-      detected: true,
-    });
+    chrome.runtime.sendMessage(
+      {
+        action:   "signupDetected",
+        url:      window.location.href,
+        tosUrl:   findTosLink(),
+        detected: true,
+      },
+      () => {
+        // Suppress "Receiving end does not exist" — expected in MV3 when the
+        // service worker is inactive. Accessing lastError marks it as handled.
+        void chrome.runtime.lastError;
+      }
+    );
   }
 }
 
