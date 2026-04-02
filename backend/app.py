@@ -6,11 +6,6 @@ Routes:
   POST /analyze          — full ToS analysis (text -> risk JSON)
   POST /fetch-url        — server-side URL fetch + clean text extraction
   GET  /submitted-urls   — log of every URL analyzed
-
-v3.2.0 — /fetch-url now tries Playwright (headless Chromium) first so that
-          JS-rendered content like Meta's accordion vendor lists is captured.
-          Falls back to requests+BeautifulSoup if Playwright is unavailable
-          or the page times out.
 """
 import os, time, json, re, sys, logging
 from flask import Flask, request, jsonify
@@ -24,19 +19,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# ── Playwright availability check ──────────────────────────────────────────────
-try:
-    from playwright.sync_api import sync_playwright
-    PLAYWRIGHT_AVAILABLE = True
-    logger.info("Playwright available — JS-rendered pages will be fully expanded")
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
-    logger.warning("Playwright not available — falling back to requests+BS4")
-
 # ── Rule-based classifier ──────────────────────────────────────────────────────
 from classifier import RuleBasedClassifier
 rule_classifier = RuleBasedClassifier()
 
+# Auto-detect method name (classifier.py may use classify_clause, predict, etc.)
 _rule_method = None
 for _m in ["classify", "classify_clause", "classify_text", "predict", "run", "analyse", "analyze"]:
     if hasattr(rule_classifier, _m) and callable(getattr(rule_classifier, _m)):
@@ -55,9 +42,11 @@ def _rule_classify(text):
         return {}
     try:
         result = getattr(rule_classifier, _rule_method)(text)
+        # classify_clause returns a list of matches — take the highest-confidence one
         if isinstance(result, list):
             if not result:
                 return {}
+            # Sort by confidence descending, take first
             result = sorted(result, key=lambda x: x.get("confidence", 0), reverse=True)[0]
         return result or {}
     except Exception as e:
@@ -78,12 +67,19 @@ except Exception as e:
 
 # ── spaCy segmenter ────────────────────────────────────────────────────────────
 def _fallback_segmenter(text):
+    """
+    Robust fallback segmenter when spaCy is unavailable.
+    Splits on blank lines, numbered headings, or lettered sub-items.
+    Merges short fragments with the next segment.
+    """
+    # Split on double newlines or before numbered/lettered list items
     parts = re.split(r'\n{2,}|\n(?=\s*\d+[\.\)]\s+[A-Z])|\n(?=\s*[A-Z][A-Z\s]{4,}$)', text)
     segments = []
     for p in parts:
         p = p.strip()
         if len(p) < 40:
             continue
+        # Further split very long single paragraphs on sentence boundaries
         if len(p) > 1200:
             sents = re.split(r'(?<=[.!?])\s+(?=[A-Z])', p)
             buf = ""
@@ -162,126 +158,84 @@ def _summary(score, level, n_flagged, n_total):
                 f"Some data handling and liability provisions warrant attention.")
     return (f"Low risk detected. {n_flagged} minor clause(s) found across {n_total} analyzed.")
 
-# ── Text cleaning helper (shared by both fetch methods) ───────────────────────
-def _clean_fetched_text(raw):
-    """Normalize raw extracted text into clean lines for analysis."""
-    lines = [l.strip() for l in raw.splitlines() if l.strip() and len(l.strip()) > 15]
-    return "\n".join(lines)
-
-# ── Playwright fetch (JS-rendered pages, accordion expansion) ─────────────────
-def _fetch_with_playwright(url):
+def preprocess_text(text: str) -> str:
     """
-    Launch a headless Chromium browser, load the page, expand all collapsed
-    disclosure elements (accordions, <details>, aria-expanded sections),
-    then extract the full visible text.
+    Universal text normalizer — runs on ALL input paths (URL fetch, paste,
+    extension DOM) before the segmenter sees the text.
 
-    Returns: (clean_text: str, expanded_count: int)
-    Raises:  Exception on timeout or navigation failure
+    The core problem: copy-paste and DOM extraction produce single newlines
+    between paragraphs. The segmenter's primary split needs double newlines.
+    Without this, pasted text produces ~30% fewer clauses and a lower score
+    than the same document fetched server-side.
+
+    This function is a lightweight safety net on top of segmenter._normalize_text().
+    It handles cases specific to each input format:
+
+      1. Tab characters → spaces (extension DOM sometimes emits these)
+      2. Windows smart quotes / dashes → ASCII equivalents
+      3. Legal section headers in ALL CAPS with no surrounding blank lines
+         → ensure blank line before them
+      4. Lines that look like "X. Title" or "(a) Title" starting a new section
+         → ensure blank line before them
+      5. Sentences ending in .!? followed by a capital on the next line
+         → insert blank line (paragraph break)
     """
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-extensions",
-                "--disable-background-networking",
-            ]
-        )
-        context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            viewport={"width": 1280, "height": 900},
-        )
-        page = context.new_page()
+    import re
 
-        try:
-            # Navigate — wait for DOM to be interactive, not full network idle
-            # (network idle can hang on pages with long-polling or analytics)
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+    # Normalize encoding artifacts
+    text = text.replace('\t', ' ')
+    text = text.replace('\u2019', "'").replace('\u2018', "'")
+    text = text.replace('\u201c', '"').replace('\u201d', '"')
+    text = text.replace('\u2013', '-').replace('\u2014', '-')
+    text = re.sub(r'\r\n|\r', '\n', text)
 
-            # Extra wait for JS frameworks to finish rendering
-            page.wait_for_timeout(1800)
+    # Collapse 3+ blank lines early
+    text = re.sub(r'\n{3,}', '\n\n', text)
 
-            # ── Step 1: Open all native <details> elements directly ──────────
-            page.evaluate("""
-                document.querySelectorAll('details:not([open])').forEach(d => {
-                    d.open = true;
-                });
-            """)
+    lines = text.splitlines()
+    out = []
 
-            # ── Step 2: Click collapsed ARIA / framework accordion triggers ──
-            # Covers: standard ARIA, Radix UI, Headless UI patterns
-            COLLAPSED_SELECTORS = ", ".join([
-                '[aria-expanded="false"]',
-                '[data-state="closed"]',
-                '[data-headlessui-state="closed"]',
-            ])
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        out.append(line)
 
-            triggers = page.query_selector_all(COLLAPSED_SELECTORS)
-            clicked = 0
-            MAX_CLICKS = 60  # safety cap
+        # Don't insert after the last line or before an already-blank line
+        if i >= len(lines) - 1:
+            continue
+        next_stripped = lines[i + 1].strip()
+        if not next_stripped or not stripped:
+            continue
 
-            for trigger in triggers:
-                if clicked >= MAX_CLICKS:
-                    break
-                try:
-                    # Skip invisible elements (zero bounding box)
-                    box = trigger.bounding_box()
-                    if not box or (box["width"] == 0 and box["height"] == 0):
-                        continue
-                    # Skip submit/reset buttons
-                    el_type = trigger.get_attribute("type") or ""
-                    if el_type.lower() in ("submit", "reset"):
-                        continue
-                    trigger.click(timeout=1000)
-                    clicked += 1
-                except Exception:
-                    pass  # unclickable — skip silently
+        inserted = False
 
-            # Wait for React/Vue re-renders after all clicks
-            if clicked > 0:
-                page.wait_for_timeout(800)
+        # Rule A: current line is ALL CAPS section header
+        if (stripped.isupper()
+                and 3 < len(stripped) < 120
+                and not stripped[-1].isdigit()):
+            out.append('')
+            inserted = True
 
-            logger.info(f"Playwright: expanded {clicked} accordion(s) on {url}")
+        # Rule B: next line opens a numbered/lettered section
+        if not inserted and re.match(
+            r'^(?:\d+[\.\)]\s|[A-Z][\.\)]\s|[a-z][\.\)]\s'
+            r'|[ivxIVX]+\.\s|\([a-z0-9]\)\s'
+            r'|Section\s+\d|Article\s+[IVXLC\d])',
+            next_stripped
+        ):
+            out.append('')
+            inserted = True
 
-            # ── Step 3: Extract text — remove noise, prefer main content ─────
-            text = page.evaluate("""
-                () => {
-                    const NOISE = [
-                        'script','style','noscript','nav','header',
-                        'footer','iframe','aside','figure','picture',
-                        'svg','img','button','form',
-                        '[role="navigation"]','[role="banner"]',
-                        '.cookie-banner','#cookie-consent','.navbar',
-                    ];
-                    NOISE.forEach(sel => {
-                        document.querySelectorAll(sel).forEach(el => el.remove());
-                    });
-                    const PREFER = [
-                        'main','article','[role="main"]',
-                        '.legal-content','.terms-content','.privacy-content',
-                        '#legal','#terms','#privacy','#content','.content',
-                    ];
-                    for (const sel of PREFER) {
-                        const el = document.querySelector(sel);
-                        if (el && (el.innerText || '').trim().length > 500) {
-                            return el.innerText;
-                        }
-                    }
-                    return document.body.innerText;
-                }
-            """)
+        # Rule C: sentence boundary — current ends sentence, next starts capital
+        if not inserted:
+            if (stripped and stripped[-1] in '.!?'
+                    and next_stripped and next_stripped[0].isupper()
+                    and len(stripped.split()) >= 5
+                    and len(next_stripped.split()) >= 4):
+                out.append('')
 
-            clean = _clean_fetched_text(text or "")
-            return clean, clicked
-
-        finally:
-            browser.close()
+    result = '\n'.join(out)
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
@@ -290,8 +244,7 @@ def health():
         "status": "ok",
         "classifier_mode": CLASSIFIER_MODE,
         "rule_method": _rule_method,
-        "playwright": PLAYWRIGHT_AVAILABLE,
-        "version": "3.2.0",
+        "version": "3.1.0",
     })
 
 @app.route("/analyze", methods=["POST"])
@@ -304,7 +257,9 @@ def analyze():
         return jsonify({"error": "Text too short (minimum 50 characters)"}), 400
 
     t0 = time.time()
+    text = preprocess_text(text)
     clauses = segment_clauses(text)
+    # Cap clause count to prevent timeout on very large documents
     CLAUSE_CAP = 300
     if len(clauses) > CLAUSE_CAP:
         logger.info(f"Segmented into {len(clauses)} clauses — capping at {CLAUSE_CAP}")
@@ -328,6 +283,7 @@ def analyze():
                 "matched_keywords":       res.get("matched_keywords", []),
             })
     else:
+        # Rule-based only
         for i, clause_text in enumerate(clauses):
             res  = _rule_classify(clause_text)
             cat  = res.get("category") or res.get("primary_category") or "none"
@@ -353,10 +309,10 @@ def analyze():
 
     category_scores = {
         cat: {
-            "label":          meta["label"],
-            "weight":         meta["weight"],
-            "clause_count":   len(cat_scores[cat]["clauses"]),
-            "score":          cat_scores[cat]["score"],
+            "label":         meta["label"],
+            "weight":        meta["weight"],
+            "clause_count":  len(cat_scores[cat]["clauses"]),
+            "score":         cat_scores[cat]["score"],
             "max_risk_level": _max_risk(cat_scores[cat]["clauses"]),
         }
         for cat, meta in CATEGORY_META.items()
@@ -381,27 +337,6 @@ def fetch_url():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    _url_log.append(url)
-
-    # ── Strategy 1: Playwright (JS-rendered, accordion expansion) ─────────────
-    if PLAYWRIGHT_AVAILABLE:
-        try:
-            clean, expanded = _fetch_with_playwright(url)
-            if len(clean) >= 100:
-                logger.info(f"Playwright fetch OK: {url} -> {len(clean)} chars, {expanded} expanded")
-                return jsonify({
-                    "text":       clean,
-                    "char_count": len(clean),
-                    "url":        url,
-                    "method":     "playwright",
-                    "expanded":   expanded,
-                })
-            else:
-                logger.warning(f"Playwright extracted too little text ({len(clean)} chars), falling back")
-        except Exception as e:
-            logger.warning(f"Playwright fetch failed ({e}), falling back to requests")
-
-    # ── Strategy 2: requests + BeautifulSoup (static HTML fallback) ──────────
     headers = {
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                        "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -441,19 +376,16 @@ def fetch_url():
             soup.find(class_=re.compile(r"content|main|body|terms|privacy", re.I)) or
             soup.body or soup)
 
-    clean = _clean_fetched_text(main.get_text(separator="\n"))
+    raw   = main.get_text(separator="\n")
+    lines = [l.strip() for l in raw.splitlines() if l.strip() and len(l.strip()) > 15]
+    clean = preprocess_text("\n".join(lines))
 
     if len(clean) < 100:
         return jsonify({"error": "Could not extract meaningful text. Try pasting directly."}), 422
 
-    logger.info(f"requests fetch OK: {url} -> {len(clean)} chars")
-    return jsonify({
-        "text":       clean,
-        "char_count": len(clean),
-        "url":        url,
-        "method":     "requests",
-        "expanded":   0,
-    })
+    _url_log.append(url)
+    logger.info(f"Fetched {url} -> {len(clean)} chars")
+    return jsonify({"text": clean, "char_count": len(clean), "url": url})
 
 @app.route("/submitted-urls", methods=["GET"])
 def submitted_urls():
