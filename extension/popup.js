@@ -97,32 +97,66 @@ async function run() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) { showError("Could not access the current tab."); return; }
 
-  // Ask background.js to relay to content.js
-  let extracted;
+  const statusEl = document.getElementById("loading-status");
+  const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+
+  // ── Strategy 1: Server-side fetch ────────────────────────────────────────
+  // Same Playwright pipeline as the web demo → consistent results.
+  // Falls back to DOM if server can't reach the page (auth-gated, 403, etc.)
+  let text = null;
+  let extractionMethod = "server";
+
+  setStatus("Fetching document via server…");
   try {
-    extracted = await chrome.runtime.sendMessage({ action: "getPageText", tabId: tab.id });
+    const res = await fetch(`${API_URL}/fetch-url`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ url: tab.url }),
+      signal:  AbortSignal.timeout(18000),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.text && d.text.length > 100) text = d.text;
+    }
+    // 4xx (bot-blocked, no text) → fall through to DOM
   } catch (e) {
-    showError("Cannot read this page.", "Navigate to a Terms of Service or Privacy Policy page and try again.");
-    return;
+    // Network error / timeout → fall through to DOM
   }
 
-  if (!extracted?.success) {
-    showError("Could not extract text.", extracted?.error || "Unknown error.");
-    return;
+  // ── Strategy 2: DOM extraction fallback ──────────────────────────────────
+  if (!text) {
+    extractionMethod = "dom";
+    setStatus("Reading document from page…");
+    try {
+      const extracted = await chrome.runtime.sendMessage({
+        action: "getPageText",
+        tabId:  tab.id,
+      });
+      if (extracted?.success && extracted.text?.trim().length > 100) {
+        text = extracted.text;
+      } else {
+        showError("Could not extract text.", extracted?.error || "Navigate to a Terms of Service or Privacy Policy page and try again.");
+        return;
+      }
+    } catch (e) {
+      showError("Cannot read this page.", "Navigate to a Terms of Service or Privacy Policy page and try again.");
+      return;
+    }
   }
 
-  if (!extracted.text || extracted.text.trim().length < 100) {
+  if (!text || text.trim().length < 100) {
     showError("Not enough text found.", "Make sure you are on a Terms of Service or Privacy Policy page.");
     return;
   }
 
-  // Call Flask API
+  // ── Call Flask /analyze ───────────────────────────────────────────────────
+  setStatus("Analyzing clauses…");
   let data;
   try {
     const res = await fetch(`${API_URL}/analyze`, {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: extracted.text }),
+      body:    JSON.stringify({ text }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
@@ -135,11 +169,11 @@ async function run() {
     return;
   }
 
-  render(data);
+  render(data, extractionMethod);
 }
 
 // ── Render results ───────────────────────────────────────────
-function render(data) {
+function render(data, extractionMethod = "server") {
   const { risk_score, risk_level, category_scores, clauses,
           total_clauses_analyzed, total_risk_clauses_detected, processing_time_ms } = data;
 
@@ -188,7 +222,7 @@ function render(data) {
           ${snippetText ? `
             <div class="pill-expand" data-open="false">▸ See clause${clauseRef ? " (" + clauseRef + ")" : ""}</div>
             <div class="pill-clause hidden">
-              ${clauseRef ? '<span style="font-size:9px;font-weight:700;color:#2e75b6;text-transform:uppercase;letter-spacing:0.5px;">' + clauseRef + ' — use Ctrl+F on the page to find it</span><br><br>' : ""}
+              ${clauseRef ? '<span class="pill-clause-ref">' + clauseRef + ' — use Ctrl+F on the page to find it</span>' : ""}
               ${esc(snippetText)}
             </div>
           ` : ""}
@@ -224,8 +258,9 @@ function render(data) {
     catGrid.appendChild(row);
   });
 
+  const methodLabel = extractionMethod === "server" ? "server fetch" : "page DOM";
   document.getElementById("footer-stats").textContent =
-    `${total_risk_clauses_detected} risks · ${total_clauses_analyzed} clauses · ${processing_time_ms}ms`;
+    `${total_risk_clauses_detected} risks · ${total_clauses_analyzed} clauses · ${processing_time_ms}ms · ${methodLabel}`;
 
   showState("results");
 }
