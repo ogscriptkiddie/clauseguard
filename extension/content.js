@@ -8,6 +8,10 @@
  * Detection runs on:
  *   - Initial page load
  *   - DOM mutations (catches React/SPA flows like Spotify's multi-step signup)
+ *
+ * v2 — expandAllDisclosures() added:
+ *   Programmatically expands accordions, <details>, aria-expanded elements
+ *   before extraction so hidden clause text (e.g. Meta vendor lists) is captured.
  */
 
 // ─── ToS / Signup Detection ───────────────────────────────────────────────────
@@ -96,30 +100,119 @@ const observer = new MutationObserver(() => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 
-// ─── Text Extraction ──────────────────────────────────────────────────────────
+// ─── Disclosure Expansion ─────────────────────────────────────────────────────
+//
+// Expands all collapsed accordions, <details> elements, and aria-expanded
+// sections in the LIVE DOM before we clone and extract text.
+//
+// Targets (in order of reliability):
+//   1. <details> — native HTML, just set .open = true (no click needed)
+//   2. [aria-expanded="false"] — standard ARIA accordion pattern
+//   3. [data-state="closed"] — Radix UI / shadcn accordion pattern
+//   4. [data-headlessui-state="closed"] — Headless UI (used by some React apps)
+//
+// Safety guards:
+//   - Never clicks submit/reset buttons
+//   - Never clicks buttons inside <form> without an explicit role
+//   - Skips elements that are hidden or have zero dimensions (already invisible)
+//   - Caps at 60 clicks to avoid infinite expansion loops on huge pages
+//   - Waits 700ms after all clicks for re-renders to settle
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "extractText") {
+async function expandAllDisclosures() {
+  let clickCount = 0;
+  const MAX_CLICKS = 60;
+
+  // 1. Native <details> — open directly, no click event needed
+  document.querySelectorAll('details:not([open])').forEach(d => {
+    d.open = true;
+  });
+
+  // 2. ARIA / framework accordion triggers
+  const COLLAPSED_SELECTORS = [
+    '[aria-expanded="false"]',
+    '[data-state="closed"]',
+    '[data-headlessui-state="closed"]',
+  ].join(',');
+
+  const triggers = Array.from(document.querySelectorAll(COLLAPSED_SELECTORS));
+
+  for (const el of triggers) {
+    if (clickCount >= MAX_CLICKS) break;
+
+    // Safety: skip form submit/reset buttons
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'submit' || type === 'reset') continue;
+
+    // Safety: skip plain <button> inside a <form> with no role (likely form submit)
+    const tag  = el.tagName.toLowerCase();
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    if (tag === 'button' && !role && el.closest('form')) continue;
+
+    // Safety: skip elements with no visual presence (display:none etc.)
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+
     try {
-      sendResponse({ success: true, text: extractPageText(), url: window.location.href });
-    } catch (err) {
-      sendResponse({ success: false, error: err.message });
+      el.click();
+      clickCount++;
+    } catch (e) {
+      // Silently skip unclickable elements
     }
   }
-  return true;
+
+  // Wait for React/Vue re-renders and CSS transitions to complete
+  if (clickCount > 0 || document.querySelectorAll('details').length > 0) {
+    await new Promise(r => setTimeout(r, 700));
+  }
+
+  return clickCount; // returned for debug logging
+}
+
+
+// ─── Text Extraction ──────────────────────────────────────────────────────────
+
+// Now async — expands disclosures first, then extracts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "extractText") {
+    expandAndExtract()
+      .then(({ text, expanded }) => {
+        sendResponse({
+          success:  true,
+          text,
+          url:      window.location.href,
+          expanded, // number of accordions clicked — useful for popup debug info
+        });
+      })
+      .catch(err => {
+        sendResponse({ success: false, error: err.message });
+      });
+  }
+  return true; // keeps message channel open for async sendResponse
 });
 
+async function expandAndExtract() {
+  const expanded = await expandAllDisclosures();
+  const text     = extractPageText();
+  return { text, expanded };
+}
+
 function extractPageText() {
+  // Clone the live DOM *after* expansions have happened
   const clone = document.body.cloneNode(true);
 
-  ["script","style","noscript","nav","header","footer","iframe",
-   "img","svg","button","[role='navigation']","[role='banner']",
-   ".cookie-banner","#cookie-consent",".navbar","#header","#footer"
+  // Strip noise elements
+  [
+    "script","style","noscript","nav","header","footer","iframe",
+    "img","svg","button","[role='navigation']","[role='banner']",
+    ".cookie-banner","#cookie-consent",".navbar","#header","#footer"
   ].forEach(sel => clone.querySelectorAll(sel).forEach(el => el.remove()));
 
+  // Prefer a known legal content container
   let target = null;
-  for (const sel of ["main","article","[role='main']",".legal-content",
-    ".terms-content",".privacy-content","#legal","#terms","#privacy","#content",".content"]) {
+  for (const sel of [
+    "main","article","[role='main']",".legal-content",
+    ".terms-content",".privacy-content","#legal","#terms","#privacy","#content",".content"
+  ]) {
     const el = clone.querySelector(sel);
     if (el && (el.innerText || "").trim().length > 500) { target = el; break; }
   }
