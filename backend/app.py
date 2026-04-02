@@ -387,6 +387,64 @@ def fetch_url():
     logger.info(f"Fetched {url} -> {len(clean)} chars")
     return jsonify({"text": clean, "char_count": len(clean), "url": url})
 
+@app.route("/upload-pdf", methods=["POST"])
+def upload_pdf():
+    """
+    Accepts a PDF file upload, extracts text page-by-page using pypdf,
+    preprocesses it, and returns clean text ready for /analyze.
+    PDF pages are joined with double newlines — preserving natural
+    paragraph structure better than any other input method.
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    f = request.files['file']
+    if not f.filename or not f.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "File must be a PDF (.pdf)"}), 400
+
+    try:
+        import pypdf
+    except ImportError:
+        return jsonify({"error": "PDF support not available on this server. Contact the admin."}), 500
+
+    try:
+        reader = pypdf.PdfReader(f)
+        if len(reader.pages) == 0:
+            return jsonify({"error": "PDF has no pages."}), 422
+
+        pages = []
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text and page_text.strip():
+                pages.append(page_text.strip())
+
+        raw = "\n\n".join(pages)
+
+        if not raw.strip():
+            return jsonify({"error": (
+                "Could not extract text from this PDF. "
+                "It may be scanned or image-based. "
+                "Try a text-based PDF or use the URL option instead."
+            )}), 422
+
+        clean = preprocess_text(raw)
+
+        if len(clean) < 100:
+            return jsonify({"error": "Too little text extracted. PDF may be scanned or password-protected."}), 422
+
+        logger.info(f"PDF upload: {f.filename} -> {len(clean)} chars, {len(reader.pages)} pages")
+        return jsonify({
+            "text":       clean,
+            "char_count": len(clean),
+            "pages":      len(reader.pages),
+            "filename":   f.filename,
+        })
+
+    except Exception as e:
+        logger.error(f"PDF extraction error: {e}")
+        return jsonify({"error": f"Failed to read PDF: {str(e)}"}), 500
+
+
 @app.route("/submitted-urls", methods=["GET"])
 def submitted_urls():
     return jsonify({"urls": _url_log, "count": len(_url_log)})
