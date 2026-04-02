@@ -29,7 +29,7 @@
     .body::-webkit-scrollbar{width:3px}
     .body::-webkit-scrollbar-thumb{background:var(--parchment4)}
     .state{display:none}
-    .state.active{display:contents}
+    .state.active{display:flex;flex-direction:column;gap:10px}
     .alert-banner{background:var(--ink);padding:11px 13px;display:flex;gap:10px;align-items:flex-start;border-left:3px solid var(--amber)}
     .alert-banner .ai{font-size:16px;flex-shrink:0;margin-top:1px}
     .alert-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--amber);margin-bottom:4px}
@@ -53,12 +53,12 @@
     .score-card.MEDIUM::before{background:var(--amber)}
     .score-card.LOW{background:var(--forest-bg);border-left:3px solid var(--forest)}
     .score-card.LOW::before{background:var(--forest)}
-    .score-number{font-family:'Playfair Display',serif;font-size:56px;font-weight:900;line-height:1;letter-spacing:-2px}
+    .score-number{font-family:'Playfair Display',serif;font-size:56px;font-weight:900;line-height:1;letter-spacing:-2px;color:var(--ink)}
     .score-card.HIGH .score-number{color:var(--red)}
     .score-card.MEDIUM .score-number{color:var(--amber)}
     .score-card.LOW .score-number{color:var(--forest)}
     .score-denom{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px}
-    .score-verdict{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px}
+    .score-verdict{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px;color:var(--ink3)}
     .score-card.HIGH .score-verdict{color:var(--red)}
     .score-card.MEDIUM .score-verdict{color:var(--amber)}
     .score-card.LOW .score-verdict{color:var(--forest)}
