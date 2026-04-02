@@ -1,1 +1,1 @@
-web: python -m spacy download en_core_web_sm && gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --max-requests 100 --max-requests-jitter 20
+web: python -m playwright install --with-deps chromium && python -m spacy download en_core_web_sm && gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --max-requests 100 --max-requests-jitter 20
