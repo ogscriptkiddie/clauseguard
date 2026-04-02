@@ -158,6 +158,118 @@ def _summary(score, level, n_flagged, n_total):
                 f"Some data handling and liability provisions warrant attention.")
     return (f"Low risk detected. {n_flagged} minor clause(s) found across {n_total} analyzed.")
 
+
+# ── User obligation filter ─────────────────────────────────────────────────────
+#
+# Problem: the classifier fires on keywords like "biometric", "financial
+# information", "tracking" even when the clause is telling the USER not to
+# do something (e.g. "Don't share biometric data of others").  These are
+# user obligations — not company risk clauses — and should score NONE.
+#
+# Strategy: three independent signals, any one of which is sufficient:
+#   1. PREFIX  — clause starts with a prohibition directed at the user
+#   2. SUBJECT — "you/your/user" appears far more than "we/us/our"
+#                AND no company-action verb follows a company pronoun
+#   3. LIST    — numbered/lettered list item that opens with a prohibition verb
+#
+# We only demote HIGH/MEDIUM → NONE.  LOW clauses are already low weight.
+
+_PREFIX_RE = re.compile(
+    r"""(?xi)
+    ^\s*
+    (?:
+        # Direct user prohibition openings
+        you\s+(?:must\s+not|may\s+not|shall\s+not|will\s+not|cannot|can\s+not|
+                 agree\s+not\s+to|are\s+not\s+(?:permitted|allowed|authorized|
+                 entitled)|are\s+prohibited\s+from|are\s+strictly\s+prohibited)
+      |
+        # Generic prohibition openings
+        (?:users?\s+)?
+        (?:must\s+not|may\s+not|shall\s+not|cannot|are\s+not\s+(?:permitted|
+           allowed|authorized)|are\s+prohibited|is\s+prohibited|are\s+forbidden)
+      |
+        # Imperative don't / do not
+        (?:please\s+)?don\'?t\b
+      |
+        do\s+not\b
+      |
+        # Prohibited/forbidden as sentence opener
+        (?:the\s+following\s+(?:activities?\s+)?(?:is|are)\s+)?
+        (?:prohibited|forbidden|not\s+(?:permitted|allowed))
+      |
+        # List item that is a prohibition
+        (?:[ivxIVX]+\.|[a-z]\)|\d+[\.\)])\s+
+        (?:don\'?t|do\s+not|you\s+(?:must\s+not|may\s+not|shall\s+not|cannot))
+    )
+    """,
+    re.IGNORECASE,
+)
+
+# Company-action phrases — presence of these means the company is doing
+# something to the user, so we should NOT demote even if "you" count is high
+_COMPANY_ACTION_RE = re.compile(
+    r"""(?xi)
+    \b
+    (?:we|us|our|the\s+company|the\s+service|the\s+platform)
+    \s+
+    (?:may|will|can|shall|collect|share|sell|transfer|retain|store|
+       disclose|provide|use|process|track|monitor|access|transmit|
+       combine|infer|profile|send|distribute)
+    \b
+    """,
+    re.IGNORECASE,
+)
+
+def _is_user_obligation(text: str) -> bool:
+    """
+    Returns True if this clause is a user obligation / prohibition rather
+    than a company-imposed risk on the user.
+
+    Three independent signals — any one triggers demotion unless a
+    company-action phrase is present (which overrides the decision).
+    """
+    t = text.strip()
+
+    # If the company is actively doing something to the user, keep the clause
+    if _COMPANY_ACTION_RE.search(t):
+        return False
+
+    # Signal 1: prefix pattern
+    if _PREFIX_RE.match(t):
+        return True
+
+    # Signal 2: subject analysis
+    # Count user-subject vs company-subject pronouns
+    t_lower = t.lower()
+    user_count    = len(re.findall(r'\b(you|your|user\'?s?)\b', t_lower))
+    company_count = len(re.findall(r'\b(we|us|our|company|service|platform)\b', t_lower))
+
+    # User is overwhelmingly the subject AND a prohibition verb is present
+    prohibition_with_user = re.search(
+        r'\b(?:you|users?)\b.{0,30}\b(?:must\s+not|may\s+not|shall\s+not|'
+        r'cannot|agree\s+not|are\s+prohibited|are\s+not\s+(?:permitted|allowed|'
+        r'authorized)|are\s+forbidden)\b',
+        t_lower,
+    )
+    if prohibition_with_user and user_count > company_count:
+        return True
+
+    return False
+
+
+def _filter_user_obligations(classified: list) -> list:
+    """
+    Demotes HIGH/MEDIUM clauses that are user obligations to NONE.
+    Does not touch LOW clauses (already low-weight) or NONE clauses.
+    """
+    for c in classified:
+        if c.get("risk_level") in ("HIGH", "MEDIUM"):
+            if _is_user_obligation(c.get("text", "")):
+                c["risk_level"] = "NONE"
+                c["category"]   = "none"
+                c["primary_category"] = "none"
+    return classified
+
 def preprocess_text(text: str) -> str:
     """
     Universal text normalizer — runs on ALL input paths (URL fetch, paste,
@@ -301,7 +413,7 @@ def analyze():
                 "matched_keywords":       kws,
             })
 
-    risk_clauses = [c for c in classified
+    risk_clauses = [c for c in _filter_user_obligations(classified)
                     if c["risk_level"] != "NONE" and c["category"] != "none"]
 
     final_score, risk_level, cat_scores = _score_from_clauses(risk_clauses)
@@ -386,64 +498,6 @@ def fetch_url():
     _url_log.append(url)
     logger.info(f"Fetched {url} -> {len(clean)} chars")
     return jsonify({"text": clean, "char_count": len(clean), "url": url})
-
-@app.route("/upload-pdf", methods=["POST"])
-def upload_pdf():
-    """
-    Accepts a PDF file upload, extracts text page-by-page using pypdf,
-    preprocesses it, and returns clean text ready for /analyze.
-    PDF pages are joined with double newlines — preserving natural
-    paragraph structure better than any other input method.
-    """
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-
-    f = request.files['file']
-    if not f.filename or not f.filename.lower().endswith('.pdf'):
-        return jsonify({"error": "File must be a PDF (.pdf)"}), 400
-
-    try:
-        import pypdf
-    except ImportError:
-        return jsonify({"error": "PDF support not available on this server. Contact the admin."}), 500
-
-    try:
-        reader = pypdf.PdfReader(f)
-        if len(reader.pages) == 0:
-            return jsonify({"error": "PDF has no pages."}), 422
-
-        pages = []
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text and page_text.strip():
-                pages.append(page_text.strip())
-
-        raw = "\n\n".join(pages)
-
-        if not raw.strip():
-            return jsonify({"error": (
-                "Could not extract text from this PDF. "
-                "It may be scanned or image-based. "
-                "Try a text-based PDF or use the URL option instead."
-            )}), 422
-
-        clean = preprocess_text(raw)
-
-        if len(clean) < 100:
-            return jsonify({"error": "Too little text extracted. PDF may be scanned or password-protected."}), 422
-
-        logger.info(f"PDF upload: {f.filename} -> {len(clean)} chars, {len(reader.pages)} pages")
-        return jsonify({
-            "text":       clean,
-            "char_count": len(clean),
-            "pages":      len(reader.pages),
-            "filename":   f.filename,
-        })
-
-    except Exception as e:
-        logger.error(f"PDF extraction error: {e}")
-        return jsonify({"error": f"Failed to read PDF: {str(e)}"}), 500
-
 
 @app.route("/submitted-urls", methods=["GET"])
 def submitted_urls():
