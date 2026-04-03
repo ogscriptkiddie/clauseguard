@@ -31,6 +31,7 @@ _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 if not _allowed_origins:
     _allowed_origins = [
         "https://clauseguard-production-183f.up.railway.app",
+        "https://clauseguard-chi.vercel.app",
         "http://localhost:5000",
         "http://127.0.0.1:5000",
     ]
