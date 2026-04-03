@@ -47,10 +47,68 @@ body::before{
   opacity:.028;mix-blend-mode:multiply;
 }
 
-/* ── CURSOR ─────────────────────────────────────────── */
+/* ── CURSOR — Scanner Reticle ────────────────────────── */
 *{cursor:none!important}
-#cur{position:fixed;width:5px;height:5px;background:var(--ink);border-radius:50%;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);transition:width .15s,height .15s}
-#cur2{position:fixed;width:34px;height:34px;border:1px solid rgba(26,23,20,.2);border-radius:50%;background:transparent;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);transition:transform .08s ease,width .2s,height .2s}
+
+/* Center dot — sharp ink square, rotated 45° = diamond */
+#cur{
+  position:fixed;
+  width:5px;height:5px;
+  background:var(--red);
+  pointer-events:none;z-index:9999;
+  transform:translate(-50%,-50%) rotate(45deg);
+  transition:width .1s,height .1s,background .15s;
+}
+
+/* Scanning reticle — 4 corner brackets, no full border */
+#cur2{
+  position:fixed;
+  width:28px;height:28px;
+  pointer-events:none;z-index:9999;
+  transform:translate(-50%,-50%);
+}
+/* The 4 corner brackets drawn with pseudo + box-shadow trick via SVG bg */
+#cur2::before,#cur2::after{
+  content:'';position:absolute;
+  width:8px;height:8px;
+  border-color:var(--ink2);
+  border-style:solid;
+  transition:width .15s,height .15s,border-color .15s;
+}
+/* Top-left bracket */
+#cur2::before{
+  top:0;left:0;
+  border-width:1.5px 0 0 1.5px;
+}
+/* Bottom-right bracket */
+#cur2::after{
+  bottom:0;right:0;
+  border-width:0 1.5px 1.5px 0;
+}
+/* Two more corners via child spans */
+#cur2 span::before,#cur2 span::after{
+  content:'';position:absolute;
+  width:8px;height:8px;
+  border-color:var(--ink2);
+  border-style:solid;
+  transition:width .15s,height .15s,border-color .15s;
+}
+#cur2 span::before{top:0;right:0;border-width:1.5px 1.5px 0 0}
+#cur2 span::after{bottom:0;left:0;border-width:0 0 1.5px 1.5px}
+
+/* Hover state — reticle expands and goes red on interactive elements */
+a:hover ~ #cur2,
+button:hover ~ #cur2,
+.ql:hover ~ #cur2,
+.hero-cta:hover ~ #cur2 { width:36px;height:36px; }
+
+body.cursor-hover #cur2::before,
+body.cursor-hover #cur2::after,
+body.cursor-hover #cur2 span::before,
+body.cursor-hover #cur2 span::after{
+  border-color:var(--red);
+}
+body.cursor-hover #cur{ background:var(--ink); transform:translate(-50%,-50%) rotate(45deg) scale(0.6); }
 
 /* ── NAV ─────────────────────────────────────────────── */
 nav{
@@ -355,32 +413,19 @@ nav.scrolled{
 .fetch-msg.err{color:var(--red)}
 .fetch-msg.wait{color:var(--ink3)}
 
-.pdf-drop{
-  width:100%;
-  border:1.5px dashed var(--parchment3);
+.paste-ta{
+  width:100%;height:200px;
   background:var(--parchment2);
-  padding:32px 20px;
-  text-align:center;
-  transition:border-color .2s,background .2s;
-  position:relative;
-  cursor:pointer;
+  border:1px solid var(--parchment3);
+  padding:16px;color:var(--ink);
+  font-family:'DM Mono',monospace;font-size:12px;
+  line-height:1.7;resize:vertical;outline:none;
+  transition:border-color .2s,box-shadow .2s;
 }
-.pdf-drop.drag-over{border-color:var(--red);background:rgba(196,30,30,.03)}
-.pdf-drop input[type=file]{
-  position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;
-}
-.pdf-drop-icon{font-size:28px;margin-bottom:8px}
-.pdf-drop-label{
-  font-family:'DM Mono',monospace;font-size:10px;
-  letter-spacing:2px;text-transform:uppercase;
-  color:var(--ink3);display:block;margin-bottom:4px;
-}
-.pdf-drop-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--ink4)}
-.pdf-file-name{
-  margin-top:10px;
-  font-family:'DM Mono',monospace;font-size:10px;
-  letter-spacing:.5px;min-height:16px;
-}
+.paste-ta:focus{border-color:var(--ink2);box-shadow:0 0 0 3px rgba(26,23,20,.06)}
+.paste-ta::placeholder{color:var(--ink4)}
+
+.sample-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 
 .input-bottom{
   display:flex;justify-content:space-between;align-items:center;
@@ -763,7 +808,7 @@ footer{
 <body>
 
 <div id="cur"></div>
-<div id="cur2"></div>
+<div id="cur2"><span></span></div>
 
 <!-- NAV -->
 <nav id="nav">
@@ -863,7 +908,7 @@ footer{
 
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('url',this)">URL</button>
-        <button class="tab-btn" onclick="switchTab('pdf',this)">Upload PDF</button>
+        <button class="tab-btn" onclick="switchTab('paste',this)">Paste Text</button>
       </div>
 
       <div id="panel-url">
@@ -873,23 +918,25 @@ footer{
         </div>
         <div class="quick-row">
           <span class="ql-sep">Try →</span>
-          <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
           <button class="ql" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify</button>
-          <button class="ql" onclick="setUrl('https://policies.google.com/terms')">Google</button>
-          <button class="ql" onclick="setUrl('https://www.reddit.com/policies/privacy-policy')">Reddit</button>
+          <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
+          <button class="ql" onclick="setUrl('https://www.airbnb.ca/terms')">Airbnb</button>
           <button class="ql" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn</button>
-          <button class="ql" onclick="setUrl('https://www.microsoft.com/en-ca/servicesagreement')">Microsoft</button>
+          <button class="ql" onclick="setUrl('https://www.doordash.com/terms/')">DoorDash</button>
+          <button class="ql" onclick="setUrl('https://www.amazon.com/gp/help/customer/display.html?nodeId=508088')">Amazon</button>
         </div>
         <div class="fetch-msg" id="fetch-msg"></div>
       </div>
 
-      <div id="panel-pdf" style="display:none">
-        <div class="pdf-drop" id="pdf-drop">
-          <input type="file" id="pdf-input" accept=".pdf" onchange="pdfSelected(this)"/>
-          <div class="pdf-drop-icon">📄</div>
-          <span class="pdf-drop-label">Drop PDF here or click to browse</span>
-          <span class="pdf-drop-sub">Terms of Service · Privacy Policy · EULA</span>
-          <div class="pdf-file-name" id="pdf-file-name"></div>
+      <div id="panel-paste" style="display:none">
+        <textarea class="paste-ta" id="paste-ta" placeholder="Paste the full Terms of Service or Privacy Policy text here…"></textarea>
+        <div class="sample-row">
+          <span class="ql-sep">Samples →</span>
+          <button class="ql" onclick="loadSample('arb')">Arbitration</button>
+          <button class="ql" onclick="loadSample('data')">Data Selling</button>
+          <button class="ql" onclick="loadSample('ip')">IP License</button>
+          <button class="ql" onclick="loadSample('liab')">Liability Cap</button>
+          <button class="ql" onclick="loadSample('full')">Full Sample</button>
         </div>
       </div>
 
@@ -1033,12 +1080,33 @@ footer{
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════
-   CURSOR
+   CURSOR — Scanner Reticle
+   Primary dot: snaps to mouse instantly (no lag)
+   Reticle: follows with slight lag for a scanning feel
+   On hover over interactive elements: expands + turns red
 ═══════════════════════════════════════════════════════ */
 const cur=document.getElementById('cur'),cur2=document.getElementById('cur2');
 let cx=0,cy=0,rx=0,ry=0;
+
 document.addEventListener('mousemove',e=>{cx=e.clientX;cy=e.clientY});
-(function loop(){requestAnimationFrame(loop);rx+=(cx-rx)*.12;ry+=(cy-ry)*.12;cur.style.cssText+=`;left:${cx}px;top:${cy}px`;cur2.style.cssText+=`;left:${rx}px;top:${ry}px`})();
+
+// Hover detection — add/remove class on body
+document.addEventListener('mouseover',e=>{
+  const t=e.target.closest('a,button,.ql,.hero-cta,.run-btn,.url-go,.tab-btn,.cc-toggle,.show-more-btn,.about-link,.footer-links a');
+  document.body.classList.toggle('cursor-hover',!!t);
+});
+
+(function loop(){
+  requestAnimationFrame(loop);
+  // Dot: instant snap
+  cur.style.left=cx+'px';
+  cur.style.top=cy+'px';
+  // Reticle: fast but smooth (0.22 = snappy, not sluggish)
+  rx+=(cx-rx)*.22;
+  ry+=(cy-ry)*.22;
+  cur2.style.left=rx+'px';
+  cur2.style.top=ry+'px';
+})();
 
 /* ═══════════════════════════════════════════════════════
    NAV SCROLL STATE
@@ -1348,64 +1416,35 @@ const rl=document.getElementById('risk-list');if(rl)rlo.observe(rl);
    ANALYZER LOGIC
 ═══════════════════════════════════════════════════════ */
 const API='https://clauseguard-production-183f.up.railway.app';
-let activeTab='url',fetchedText='',pdfText='';
+let activeTab='url',fetchedText='';
+
+const SAMPLES={
+  arb:`DISPUTES AND ARBITRATION\n\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one year after the date the party asserting the claim first knows or reasonably should know of the act.`,
+  data:`SHARING YOUR INFORMATION\n\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
+  ip:`USER CONTENT LICENSE\n\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
+  liab:`DISCLAIMER AND LIABILITY CAP\n\nTHE SERVICES ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US AS A RESULT OF OUR DECISION TO REMOVE OR RESTRICT ACCESS TO YOUR CONTENT.`,
+  full:`TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, and distribute any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences from collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. SERVICES PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
+};
 
 function switchTab(name,btn){
-  activeTab=name;fetchedText='';pdfText='';
+  activeTab=name;fetchedText='';
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('panel-url').style.display=name==='url'?'block':'none';
-  document.getElementById('panel-pdf').style.display=name==='pdf'?'block':'none';
-  const nameEl=document.getElementById('pdf-file-name');
-  if(nameEl)nameEl.textContent='';
+  document.getElementById('panel-paste').style.display=name==='paste'?'block':'none';
   upd();
 }
 function setUrl(u){document.getElementById('url-in').value=u;setFetchMsg('','');fetchedText='';upd()}
 function setFetchMsg(t,c){const e=document.getElementById('fetch-msg');e.textContent=t;e.className='fetch-msg'+(c?' '+c:'')}
 function upd(){
   const e=document.getElementById('char-ct');
-  if(activeTab==='pdf'&&pdfText)e.textContent=pdfText.length.toLocaleString()+' chars extracted';
+  if(activeTab==='paste'){const n=document.getElementById('paste-ta').value.length;e.textContent=n?n.toLocaleString()+' chars':'—';}
   else if(fetchedText)e.textContent=fetchedText.length.toLocaleString()+' chars fetched';
   else e.textContent='—';
 }
+document.getElementById('paste-ta').addEventListener('input',upd);
 document.getElementById('url-in').addEventListener('input',()=>{fetchedText='';setFetchMsg('','');upd()});
-
-// ── PDF drag-and-drop ──────────────────────────────────────────────────────
-const pdfDrop=document.getElementById('pdf-drop');
-pdfDrop.addEventListener('dragover',e=>{e.preventDefault();pdfDrop.classList.add('drag-over')});
-pdfDrop.addEventListener('dragleave',()=>pdfDrop.classList.remove('drag-over'));
-pdfDrop.addEventListener('drop',e=>{
-  e.preventDefault();pdfDrop.classList.remove('drag-over');
-  const f=e.dataTransfer.files[0];
-  if(f&&f.type==='application/pdf')uploadPdf(f);
-  else showErr('Please drop a PDF file.');
-});
-
-async function pdfSelected(input){
-  const f=input.files[0];
-  if(f)await uploadPdf(f);
-}
-
-async function uploadPdf(file){
-  const nameEl=document.getElementById('pdf-file-name');
-  nameEl.textContent='↗ Uploading '+file.name+'…';
-  nameEl.style.color='var(--ink3)';
-  pdfText='';upd();
-  const form=new FormData();
-  form.append('file',file);
-  try{
-    const res=await fetch(`${API}/upload-pdf`,{method:'POST',body:form});
-    const d=await res.json();
-    if(!res.ok)throw new Error(d.error||`Error ${res.status}`);
-    pdfText=d.text;
-    nameEl.textContent='✓ '+file.name+' · '+d.char_count.toLocaleString()+' chars · '+d.pages+' pages';
-    nameEl.style.color='var(--forest)';
-    upd();
-  }catch(e){
-    nameEl.textContent='✗ '+e.message;
-    nameEl.style.color='var(--red)';
-  }
-}
+function loadSample(k){document.getElementById('paste-ta').value=SAMPLES[k];upd()}
 
 async function fetchGo(){
   const url=document.getElementById('url-in').value.trim();
@@ -1425,8 +1464,8 @@ async function fetchGo(){
 }
 
 function analyze(){
-  const text=activeTab==='url'?fetchedText:pdfText;
-  if(!text||text.length<50){showErr(activeTab==='url'?'Fetch a URL first.':'Upload a PDF first.');return}
+  const text=activeTab==='url'?fetchedText:document.getElementById('paste-ta').value.trim();
+  if(!text||text.length<50){showErr(activeTab==='url'?'Fetch a URL first, or switch to Paste Text.':'Paste at least 50 characters or load a sample.');return}
   runAnalysis(text);
 }
 
