@@ -5,11 +5,12 @@ Routes:
   GET  /health           — liveness check
   POST /analyze          — full ToS analysis (text -> risk JSON)
   POST /fetch-url        — server-side URL fetch + clean text extraction
-  GET  /submitted-urls   — log of every URL analyzed
 """
-import os, time, json, re, sys, logging
+import os, time, json, re, sys, logging, ipaddress, urllib.parse
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import requests as http_requests
 from bs4 import BeautifulSoup
 
@@ -17,7 +18,79 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+
+# ── Request size limit — reject bodies over 2 MB before processing ─────────────
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024  # 2 MB
+
+# ── CORS — restrict to known safe origins ─────────────────────────────────────
+# In production Railway sets CORS_ALLOWED_ORIGINS; locally we allow localhost.
+# Chrome extension popups send Origin: chrome-extension://<id> — covered by the
+# chrome-extension:// wildcard below.
+_raw_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+if not _allowed_origins:
+    _allowed_origins = [
+        "https://clauseguard-production-183f.up.railway.app",
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+    ]
+CORS(app, origins=_allowed_origins + ["chrome-extension://*"])
+
+# ── Rate limiting — in-memory, safe for single-worker gunicorn ────────────────
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "60 per hour"],
+    storage_uri="memory://",
+)
+
+# ── SSRF guard ────────────────────────────────────────────────────────────────
+_BLOCKED_HOSTS = frozenset({
+    "localhost", "localhost.", "metadata.google.internal",
+})
+_BLOCKED_SCHEMES = frozenset({"file", "ftp", "data", "javascript", "gopher"})
+
+def _validate_fetch_url(url: str):
+    """
+    Returns (True, "") when the URL is safe to fetch, or (False, reason) when
+    it should be blocked.  Defends against SSRF:
+      - Only http / https allowed
+      - No loopback / private / link-local / reserved addresses
+      - No cloud-metadata endpoints (169.254.x.x, ::1, etc.)
+      - No internal hostnames (.local, .internal, .localhost)
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return False, "Invalid URL"
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme in _BLOCKED_SCHEMES:
+        return False, f"URL scheme '{scheme}' is not allowed"
+    if scheme not in ("http", "https"):
+        return False, "Only http:// and https:// URLs are supported"
+
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    if not hostname:
+        return False, "URL has no hostname"
+
+    if hostname in _BLOCKED_HOSTS:
+        return False, "Requests to internal addresses are not allowed"
+
+    # Block obviously-internal TLDs
+    if hostname.endswith((".local", ".internal", ".localhost", ".corp", ".lan")):
+        return False, "Requests to internal addresses are not allowed"
+
+    # If hostname is a numeric IP, check address space
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False, "Requests to internal addresses are not allowed"
+    except ValueError:
+        pass  # hostname is not a bare IP — fine
+
+    return True, ""
 
 # ── Rule-based classifier ──────────────────────────────────────────────────────
 from classifier import RuleBasedClassifier
@@ -112,6 +185,7 @@ except Exception as e:
     segment_clauses = _fallback_segmenter
 
 # ── Category metadata ──────────────────────────────────────────────────────────
+_URL_LOG_MAX = 500   # cap in-memory log to prevent unbounded growth
 CATEGORY_META = {
     "data_sharing":         {"label": "Data Sharing",         "weight": 0.22},
     "tracking_profiling":   {"label": "Tracking & Profiling", "weight": 0.20},
@@ -360,6 +434,7 @@ def health():
     })
 
 @app.route("/analyze", methods=["POST"])
+@limiter.limit("30 per minute")
 def analyze():
     data = request.get_json(silent=True) or {}
     text = (data.get("text") or "").strip()
@@ -367,6 +442,8 @@ def analyze():
         return jsonify({"error": "No text provided"}), 400
     if len(text) < 50:
         return jsonify({"error": "Text too short (minimum 50 characters)"}), 400
+    if len(text) > 1_500_000:
+        return jsonify({"error": "Text too large (maximum 1.5 MB)"}), 413
 
     t0 = time.time()
     text = preprocess_text(text)
@@ -443,11 +520,18 @@ def analyze():
     })
 
 @app.route("/fetch-url", methods=["POST"])
+@limiter.limit("20 per minute")
 def fetch_url():
     data = request.get_json(silent=True) or {}
     url  = (data.get("url") or "").strip()
     if not url:
         return jsonify({"error": "No URL provided"}), 400
+
+    # ── SSRF guard ────────────────────────────────────────────────────────────
+    valid, reason = _validate_fetch_url(url)
+    if not valid:
+        logger.warning(f"Blocked fetch-url request: {reason} — url={url!r}")
+        return jsonify({"error": reason}), 422
 
     headers = {
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -475,7 +559,8 @@ def fetch_url():
             return jsonify({"error": f"Page not found (404): {url}"}), 422
         return jsonify({"error": f"HTTP {code} error fetching {url}"}), 502
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Unexpected error fetching URL: {e}")
+        return jsonify({"error": "Unexpected error fetching the URL"}), 500
 
     soup = BeautifulSoup(resp.text, "html.parser")
     for tag in soup(["script","style","nav","header","footer",
@@ -495,13 +580,10 @@ def fetch_url():
     if len(clean) < 100:
         return jsonify({"error": "Could not extract meaningful text. Try pasting directly."}), 422
 
-    _url_log.append(url)
+    if len(_url_log) < _URL_LOG_MAX:
+        _url_log.append(url)
     logger.info(f"Fetched {url} -> {len(clean)} chars")
     return jsonify({"text": clean, "char_count": len(clean), "url": url})
-
-@app.route("/submitted-urls", methods=["GET"])
-def submitted_urls():
-    return jsonify({"urls": _url_log, "count": len(_url_log)})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

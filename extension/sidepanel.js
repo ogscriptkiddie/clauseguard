@@ -7,7 +7,7 @@
  * a "See clause" toggle for users who want the detail.
  */
 
-const API_URL = "http://localhost:5000/analyze";
+const API_URL = "https://clauseguard-production-183f.up.railway.app/analyze";
 
 // ─── Plain-English translations ───────────────────────────────────────────────
 // Maps category + risk_level → a human explanation + emoji + real-life impact
@@ -175,11 +175,12 @@ function renderResults(data) {
     total_clauses_analyzed, total_risk_clauses_detected, processing_time_ms
   } = data;
 
-  // Score card
-  els.scoreCard.className    = `score-card ${risk_level}`;
-  els.scoreNumber.textContent = risk_score;
-  els.scoreVerdict.textContent = `${risk_level} RISK`;
-  els.scoreTagline.textContent = SCORE_TAGLINES[risk_level];
+  // Score card — validate API values before use
+  const safeLevel = ["HIGH", "MEDIUM", "LOW"].includes(risk_level) ? risk_level : "LOW";
+  els.scoreCard.className      = `score-card ${safeLevel}`;
+  els.scoreNumber.textContent  = Math.min(100, Math.max(0, Number(risk_score) || 0));
+  els.scoreVerdict.textContent = `${safeLevel} RISK`;
+  els.scoreTagline.textContent = SCORE_TAGLINES[safeLevel] ?? "";
 
   // Plain-English pills — one per category that has findings
   els.summaryPills.innerHTML = "";
@@ -217,13 +218,13 @@ function renderResults(data) {
         : null;
 
       const pill = document.createElement("div");
-      pill.className = `summary-pill ${riskLvl}`;
+      pill.className = `summary-pill ${escapeHTML(riskLvl)}`;
 
       pill.innerHTML = `
-        <div class="pill-icon">${trans.icon}</div>
+        <div class="pill-icon">${escapeHTML(trans.icon)}</div>
         <div class="pill-content">
-          <div class="pill-title">${trans.title}</div>
-          <div class="pill-detail">${trans.detail}</div>
+          <div class="pill-title">${escapeHTML(trans.title)}</div>
+          <div class="pill-detail">${escapeHTML(trans.detail)}</div>
           ${clauseSnippet ? `
             <div class="pill-expand" data-expanded="false">▸ See actual clause</div>
             <div class="pill-clause hidden" style="margin-top:6px; font-size:10px; color:#888; font-style:italic; line-height:1.5; border-top: 1px solid #f0f0f0; padding-top:6px;">${escapeHTML(clauseSnippet)}</div>
@@ -254,15 +255,17 @@ function renderResults(data) {
     const cat = category_scores[catId];
     if (!cat) return;
     const riskClass = cat.max_risk_level === "NONE" ? "NONE" : cat.max_risk_level;
+    const safeRc    = escapeHTML(riskClass);
+    const safeScore = Math.min(100, Math.max(0, Number(cat.score) || 0));
 
     const row = document.createElement("div");
     row.className = "cat-row";
     row.innerHTML = `
-      <div class="cat-name">${cat.label}</div>
+      <div class="cat-name">${escapeHTML(cat.label)}</div>
       <div class="cat-bar-bg">
-        <div class="cat-bar-fill ${riskClass}" style="width:${cat.score}%"></div>
+        <div class="cat-bar-fill ${safeRc}" style="width:${safeScore}%"></div>
       </div>
-      <div class="cat-badge ${riskClass}">${riskClass === "NONE" ? "Clean" : riskClass}</div>
+      <div class="cat-badge ${safeRc}">${safeRc === "NONE" ? "Clean" : safeRc}</div>
     `;
     els.categoryGrid.appendChild(row);
   });
@@ -277,7 +280,8 @@ function renderResults(data) {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 function escapeHTML(str) {
-  return str
+  return String(str)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
 }
