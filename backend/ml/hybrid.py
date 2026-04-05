@@ -1,11 +1,12 @@
 """
 ClauseGuard Hybrid Classifier
 
-Fixed version:
-- Safely interoperates with rule engines exposing either `classify()` or
-  `classify_clause()`.
-- Normalizes rule fallback results into one stable dict.
-- Prevents AttributeError when RuleBasedClassifier lacks `.classify()`.
+Safer intermediate version:
+- Keeps backward-compatible output shape
+- Uses ML for label prediction
+- Uses rule fallback when ML confidence is low
+- Infers risk from explicit textual evidence first, not category alone
+- Avoids defaulting arbitration/liability to HIGH without trigger language
 """
 
 import sys
@@ -25,9 +26,69 @@ CATEGORY_LABELS = {
     "arbitration": "Arbitration",
     "content_rights": "Content & IP Rights",
     "liability_limitation": "Liability Limitation",
+    "none": "None",
 }
 
 RISK_ORDER = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+
+HIGH_SIGNALS = [
+    "binding arbitration",
+    "class action waiver",
+    "waive your right to sue",
+    "waive right to sue",
+    "exclusive jurisdiction",
+    "exclusive forum",
+    "shall not exceed",
+    "not liable",
+    "no liability",
+    "liability shall be limited",
+    "consequential damages",
+    "indirect damages",
+    "without warranty",
+    "as is",
+    "royalty-free",
+    "irrevocable",
+    "perpetual",
+    "sublicensable",
+    "sell your personal information",
+    "sell personal information",
+    "sell or share",
+]
+
+MEDIUM_SIGNALS = [
+    "arbitration",
+    "dispute resolution",
+    "third parties",
+    "third-party",
+    "partners",
+    "affiliates",
+    "share personal information",
+    "disclose personal information",
+    "cookies",
+    "analytics",
+    "tracking technologies",
+    "profiling",
+    "retain",
+    "retention",
+]
+
+LOW_SIGNALS = [
+    "we do not sell",
+    "we will not sell",
+    "we never sell",
+    "you retain ownership",
+    "you keep ownership",
+    "opt out",
+    "you may delete",
+    "you can delete",
+    "upon request",
+    "limited purpose",
+    "only to provide",
+    "solely to",
+    "will not share",
+    "do not share",
+    "does not sell",
+]
 
 
 class HybridClassifier:
@@ -37,17 +98,20 @@ class HybridClassifier:
         self.ml = MLClassifier()
         self.rule = rule_based_classifier
 
+    def _empty_rule_result(self):
+        return {
+            "category": "none",
+            "category_label": "None",
+            "risk_level": "NONE",
+            "matched_keywords": [],
+            "confidence": 0.0,
+            "source": "rule_based",
+        }
+
     def _normalize_rule_result(self, rule_result):
         """Normalize rule output to one stable dict."""
         if not rule_result:
-            return {
-                "category": "none",
-                "category_label": "None",
-                "risk_level": "NONE",
-                "matched_keywords": [],
-                "confidence": 0.0,
-                "source": "rule_based",
-            }
+            return self._empty_rule_result()
 
         if isinstance(rule_result, dict):
             return {
@@ -65,18 +129,14 @@ class HybridClassifier:
         if isinstance(rule_result, list):
             dict_items = [x for x in rule_result if isinstance(x, dict)]
             if not dict_items:
-                return {
-                    "category": "none",
-                    "category_label": "None",
-                    "risk_level": "NONE",
-                    "matched_keywords": [],
-                    "confidence": 0.0,
-                    "source": "rule_based",
-                }
+                return self._empty_rule_result()
 
             best = max(
                 dict_items,
-                key=lambda m: (RISK_ORDER.get(m.get("risk_level", "NONE"), 0), m.get("confidence", 0.0)),
+                key=lambda m: (
+                    RISK_ORDER.get(m.get("risk_level", "NONE"), 0),
+                    m.get("confidence", 0.0),
+                ),
             )
             return {
                 "category": best.get("category", "none"),
@@ -90,18 +150,11 @@ class HybridClassifier:
                 "source": best.get("source", "rule_based"),
             }
 
-        return {
-            "category": "none",
-            "category_label": "None",
-            "risk_level": "NONE",
-            "matched_keywords": [],
-            "confidence": 0.0,
-            "source": "rule_based",
-        }
+        return self._empty_rule_result()
 
     def _run_rule_fallback(self, text: str) -> dict:
         if self.rule is None:
-            return self._normalize_rule_result(None)
+            return self._empty_rule_result()
 
         if hasattr(self.rule, "classify") and callable(getattr(self.rule, "classify")):
             return self._normalize_rule_result(self.rule.classify(text))
@@ -109,129 +162,106 @@ class HybridClassifier:
         if hasattr(self.rule, "classify_clause") and callable(getattr(self.rule, "classify_clause")):
             return self._normalize_rule_result(self.rule.classify_clause(text))
 
-        return self._normalize_rule_result(None)
+        return self._empty_rule_result()
+
+    def _detect_signals(self, text: str):
+        lower = text.lower()
+
+        matched_high = [s for s in HIGH_SIGNALS if s in lower]
+        matched_medium = [s for s in MEDIUM_SIGNALS if s in lower]
+        matched_low = [s for s in LOW_SIGNALS if s in lower]
+
+        return matched_high, matched_medium, matched_low
+
+    def _infer_risk(self, text: str, category: str) -> str:
+        matched_high, matched_medium, matched_low = self._detect_signals(text)
+
+        if matched_low and not matched_high and not matched_medium:
+            return "LOW"
+
+        if len(matched_high) >= 2:
+            return "HIGH"
+
+        if len(matched_high) == 1:
+            return "HIGH"
+
+        if len(matched_medium) >= 2:
+            return "MEDIUM"
+
+        if len(matched_medium) == 1:
+            return "LOW"
+
+        # No explicit harmful trigger found:
+        # keep category as topic label, but do not auto-escalate to scary risk
+        if category == "none":
+            return "NONE"
+
+        return "LOW"
+
+    def _build_output(self, category, risk_level, confidence, source, matched_keywords, all_probs):
+        return {
+            "category": category,
+            "category_label": CATEGORY_LABELS.get(category, category),
+            "risk_level": risk_level,
+            "confidence": round(float(confidence), 4),
+            "source": source,
+            "matched_keywords": matched_keywords,
+            "all_probs": all_probs or {},
+        }
 
     def classify(self, text: str) -> dict:
         ml_result = self.ml.classify(text)
-        ml_conf = ml_result["confidence"]
-        ml_cat = ml_result["category"]
+        ml_conf = ml_result.get("confidence", 0.0)
+        ml_cat = ml_result.get("category", "none")
 
-        if ml_conf >= CONFIDENCE_THRESHOLD:
-            return {
-                "category": ml_cat,
-                "category_label": CATEGORY_LABELS.get(ml_cat, ml_cat),
-                "risk_level": _infer_risk(text, ml_cat),
-                "confidence": round(ml_conf, 4),
-                "source": "ml",
-                "matched_keywords": [],
-                "all_probs": ml_result.get("all_probs", {}),
-            }
+        matched_high, matched_medium, matched_low = self._detect_signals(text)
+        evidence_matches = matched_high + matched_medium + matched_low
+
+        if ml_conf >= CONFIDENCE_THRESHOLD and ml_cat != "none":
+            return self._build_output(
+                category=ml_cat,
+                risk_level=self._infer_risk(text, ml_cat),
+                confidence=ml_conf,
+                source=ml_result.get("source", "ml"),
+                matched_keywords=evidence_matches,
+                all_probs=ml_result.get("all_probs", {}),
+            )
 
         rule_result = self._run_rule_fallback(text)
-        if rule_result.get("category") and rule_result["category"] != "none":
-            rule_cat = rule_result["category"]
-            return {
-                "category": rule_cat,
-                "category_label": CATEGORY_LABELS.get(rule_cat, rule_cat),
-                "risk_level": rule_result.get("risk_level", "LOW"),
-                "confidence": round(ml_conf, 4),
-                "source": "rule_based",
-                "matched_keywords": rule_result.get("matched_keywords", []),
-                "all_probs": ml_result.get("all_probs", {}),
-            }
+        rule_cat = rule_result.get("category", "none")
 
-        return {
-            "category": "none",
-            "category_label": "None",
-            "risk_level": "NONE",
-            "confidence": round(ml_conf, 4),
-            "source": "none",
-            "matched_keywords": [],
-            "all_probs": ml_result.get("all_probs", {}),
-        }
+        if rule_cat != "none":
+            inferred_risk = self._infer_risk(text, rule_cat)
+            rule_keywords = rule_result.get("matched_keywords", [])
+            all_keywords = list(dict.fromkeys(rule_keywords + evidence_matches))
+
+            return self._build_output(
+                category=rule_cat,
+                risk_level=inferred_risk,
+                confidence=max(ml_conf, rule_result.get("confidence", 0.0)),
+                source="rule_based",
+                matched_keywords=all_keywords,
+                all_probs=ml_result.get("all_probs", {}),
+            )
+
+        if evidence_matches:
+            return self._build_output(
+                category=ml_cat if ml_cat != "none" else "none",
+                risk_level=self._infer_risk(text, ml_cat),
+                confidence=ml_conf,
+                source="evidence_only" if ml_cat == "none" else ml_result.get("source", "ml"),
+                matched_keywords=evidence_matches,
+                all_probs=ml_result.get("all_probs", {}),
+            )
+
+        return self._build_output(
+            category="none",
+            risk_level="NONE",
+            confidence=ml_conf,
+            source="none",
+            matched_keywords=[],
+            all_probs=ml_result.get("all_probs", {}),
+        )
 
     def classify_batch(self, texts: list) -> list:
-        ml_results = self.ml.classify_batch(texts)
-        output = []
-
-        for text, ml_result in zip(texts, ml_results):
-            ml_conf = ml_result["confidence"]
-            ml_cat = ml_result["category"]
-
-            if ml_conf >= CONFIDENCE_THRESHOLD:
-                output.append({
-                    "category": ml_cat,
-                    "category_label": CATEGORY_LABELS.get(ml_cat, ml_cat),
-                    "risk_level": _infer_risk(text, ml_cat),
-                    "confidence": round(ml_conf, 4),
-                    "source": "ml",
-                    "matched_keywords": [],
-                    "all_probs": ml_result.get("all_probs", {}),
-                })
-                continue
-
-            rule_result = self._run_rule_fallback(text)
-            if rule_result.get("category") and rule_result["category"] != "none":
-                rule_cat = rule_result["category"]
-                output.append({
-                    "category": rule_cat,
-                    "category_label": CATEGORY_LABELS.get(rule_cat, rule_cat),
-                    "risk_level": rule_result.get("risk_level", "LOW"),
-                    "confidence": round(ml_conf, 4),
-                    "source": "rule_based",
-                    "matched_keywords": rule_result.get("matched_keywords", []),
-                    "all_probs": ml_result.get("all_probs", {}),
-                })
-                continue
-
-            output.append({
-                "category": "none",
-                "category_label": "None",
-                "risk_level": "NONE",
-                "confidence": round(ml_conf, 4),
-                "source": "none",
-                "matched_keywords": [],
-                "all_probs": ml_result.get("all_probs", {}),
-            })
-
-        return output
-
-
-HIGH_SIGNALS = [
-    "irrevocable", "perpetual", "binding arbitration", "class action waiver",
-    "sell your", "sell or share", "shall not exceed", "not liable",
-    "as is", "without warranty", "indefinitely", "without limit",
-    "law enforcement", "without notice", "royalty-free", "sublicensable",
-    "waive your right", "no right to", "permanently barred",
-]
-
-LOW_SIGNALS = [
-    "we do not sell", "we will not sell", "we never sell",
-    "you retain ownership", "you keep ownership", "opt out",
-    "you may delete", "you can delete", "upon request",
-    "limited purpose", "only to provide", "solely to",
-    "will not share", "do not share", "does not sell",
-]
-
-
-def _infer_risk(text: str, category: str) -> str:
-    lower = text.lower()
-
-    low_hits = sum(1 for s in LOW_SIGNALS if s in lower)
-    high_hits = sum(1 for s in HIGH_SIGNALS if s in lower)
-
-    if low_hits > 0 and high_hits == 0:
-        return "LOW"
-    if high_hits >= 2:
-        return "HIGH"
-    if high_hits == 1:
-        return "MEDIUM"
-
-    high_default_cats = {"arbitration", "liability_limitation"}
-    low_default_cats = {"data_retention"}
-
-    if category in high_default_cats:
-        return "HIGH"
-    if category in low_default_cats:
-        return "LOW"
-    return "MEDIUM"
+        return [self.classify(text) for text in texts]
