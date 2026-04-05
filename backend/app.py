@@ -5,6 +5,7 @@ Routes:
   GET  /health           — liveness check
   POST /analyze          — full ToS analysis (text -> risk JSON)
   POST /fetch-url        — server-side URL fetch + clean text extraction
+  POST /upload-pdf       — PDF upload -> text extraction -> risk JSON
 """
 import os, time, json, re, sys, logging, ipaddress, urllib.parse
 from flask import Flask, request, jsonify
@@ -19,13 +20,10 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ── Request size limit — reject bodies over 2 MB before processing ─────────────
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024  # 2 MB
+# ── Request size limit — 10 MB to accommodate PDF uploads ─────────────────────
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
 # ── CORS — restrict to known safe origins ─────────────────────────────────────
-# In production Railway sets CORS_ALLOWED_ORIGINS; locally we allow localhost.
-# Chrome extension popups send Origin: chrome-extension://<id> — covered by the
-# chrome-extension:// wildcard below.
 _raw_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 if not _allowed_origins:
@@ -37,7 +35,7 @@ if not _allowed_origins:
     ]
 CORS(app, origins=_allowed_origins + ["chrome-extension://*"])
 
-# ── Rate limiting — in-memory, safe for single-worker gunicorn ────────────────
+# ── Rate limiting ──────────────────────────────────────────────────────────────
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -52,14 +50,6 @@ _BLOCKED_HOSTS = frozenset({
 _BLOCKED_SCHEMES = frozenset({"file", "ftp", "data", "javascript", "gopher"})
 
 def _validate_fetch_url(url: str):
-    """
-    Returns (True, "") when the URL is safe to fetch, or (False, reason) when
-    it should be blocked.  Defends against SSRF:
-      - Only http / https allowed
-      - No loopback / private / link-local / reserved addresses
-      - No cloud-metadata endpoints (169.254.x.x, ::1, etc.)
-      - No internal hostnames (.local, .internal, .localhost)
-    """
     try:
         parsed = urllib.parse.urlparse(url)
     except Exception:
@@ -78,18 +68,16 @@ def _validate_fetch_url(url: str):
     if hostname in _BLOCKED_HOSTS:
         return False, "Requests to internal addresses are not allowed"
 
-    # Block obviously-internal TLDs
     if hostname.endswith((".local", ".internal", ".localhost", ".corp", ".lan")):
         return False, "Requests to internal addresses are not allowed"
 
-    # If hostname is a numeric IP, check address space
     try:
         ip = ipaddress.ip_address(hostname)
         if (ip.is_private or ip.is_loopback or ip.is_link_local
                 or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
             return False, "Requests to internal addresses are not allowed"
     except ValueError:
-        pass  # hostname is not a bare IP — fine
+        pass
 
     return True, ""
 
@@ -97,7 +85,6 @@ def _validate_fetch_url(url: str):
 from classifier import RuleBasedClassifier
 rule_classifier = RuleBasedClassifier()
 
-# Auto-detect method name (classifier.py may use classify_clause, predict, etc.)
 _rule_method = None
 for _m in ["classify", "classify_clause", "classify_text", "predict", "run", "analyse", "analyze"]:
     if hasattr(rule_classifier, _m) and callable(getattr(rule_classifier, _m)):
@@ -116,18 +103,16 @@ def _rule_classify(text):
         return {}
     try:
         result = getattr(rule_classifier, _rule_method)(text)
-        # classify_clause returns a list of matches — take the highest-confidence one
         if isinstance(result, list):
             if not result:
                 return {}
-            # Sort by confidence descending, take first
             result = sorted(result, key=lambda x: x.get("confidence", 0), reverse=True)[0]
         return result or {}
     except Exception as e:
         logger.warning(f"Rule classify error: {e}")
         return {}
 
-# ── Hybrid classifier (ML + rule fallback) ─────────────────────────────────────
+# ── Hybrid classifier ──────────────────────────────────────────────────────────
 try:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from ml.hybrid import HybridClassifier
@@ -141,19 +126,12 @@ except Exception as e:
 
 # ── spaCy segmenter ────────────────────────────────────────────────────────────
 def _fallback_segmenter(text):
-    """
-    Robust fallback segmenter when spaCy is unavailable.
-    Splits on blank lines, numbered headings, or lettered sub-items.
-    Merges short fragments with the next segment.
-    """
-    # Split on double newlines or before numbered/lettered list items
     parts = re.split(r'\n{2,}|\n(?=\s*\d+[\.\)]\s+[A-Z])|\n(?=\s*[A-Z][A-Z\s]{4,}$)', text)
     segments = []
     for p in parts:
         p = p.strip()
         if len(p) < 40:
             continue
-        # Further split very long single paragraphs on sentence boundaries
         if len(p) > 1200:
             sents = re.split(r'(?<=[.!?])\s+(?=[A-Z])', p)
             buf = ""
@@ -186,7 +164,7 @@ except Exception as e:
     segment_clauses = _fallback_segmenter
 
 # ── Category metadata ──────────────────────────────────────────────────────────
-_URL_LOG_MAX = 500   # cap in-memory log to prevent unbounded growth
+_URL_LOG_MAX = 500
 CATEGORY_META = {
     "data_sharing":         {"label": "Data Sharing",         "weight": 0.22},
     "tracking_profiling":   {"label": "Tracking & Profiling", "weight": 0.20},
@@ -233,46 +211,26 @@ def _summary(score, level, n_flagged, n_total):
                 f"Some data handling and liability provisions warrant attention.")
     return (f"Low risk detected. {n_flagged} minor clause(s) found across {n_total} analyzed.")
 
-
 # ── User obligation filter ─────────────────────────────────────────────────────
-#
-# Problem: the classifier fires on keywords like "biometric", "financial
-# information", "tracking" even when the clause is telling the USER not to
-# do something (e.g. "Don't share biometric data of others").  These are
-# user obligations — not company risk clauses — and should score NONE.
-#
-# Strategy: three independent signals, any one of which is sufficient:
-#   1. PREFIX  — clause starts with a prohibition directed at the user
-#   2. SUBJECT — "you/your/user" appears far more than "we/us/our"
-#                AND no company-action verb follows a company pronoun
-#   3. LIST    — numbered/lettered list item that opens with a prohibition verb
-#
-# We only demote HIGH/MEDIUM → NONE.  LOW clauses are already low weight.
-
 _PREFIX_RE = re.compile(
     r"""(?xi)
     ^\s*
     (?:
-        # Direct user prohibition openings
         you\s+(?:must\s+not|may\s+not|shall\s+not|will\s+not|cannot|can\s+not|
                  agree\s+not\s+to|are\s+not\s+(?:permitted|allowed|authorized|
                  entitled)|are\s+prohibited\s+from|are\s+strictly\s+prohibited)
       |
-        # Generic prohibition openings
         (?:users?\s+)?
         (?:must\s+not|may\s+not|shall\s+not|cannot|are\s+not\s+(?:permitted|
            allowed|authorized)|are\s+prohibited|is\s+prohibited|are\s+forbidden)
       |
-        # Imperative don't / do not
         (?:please\s+)?don\'?t\b
       |
         do\s+not\b
       |
-        # Prohibited/forbidden as sentence opener
         (?:the\s+following\s+(?:activities?\s+)?(?:is|are)\s+)?
         (?:prohibited|forbidden|not\s+(?:permitted|allowed))
       |
-        # List item that is a prohibition
         (?:[ivxIVX]+\.|[a-z]\)|\d+[\.\)])\s+
         (?:don\'?t|do\s+not|you\s+(?:must\s+not|may\s+not|shall\s+not|cannot))
     )
@@ -280,8 +238,6 @@ _PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Company-action phrases — presence of these means the company is doing
-# something to the user, so we should NOT demote even if "you" count is high
 _COMPANY_ACTION_RE = re.compile(
     r"""(?xi)
     \b
@@ -296,30 +252,14 @@ _COMPANY_ACTION_RE = re.compile(
 )
 
 def _is_user_obligation(text: str) -> bool:
-    """
-    Returns True if this clause is a user obligation / prohibition rather
-    than a company-imposed risk on the user.
-
-    Three independent signals — any one triggers demotion unless a
-    company-action phrase is present (which overrides the decision).
-    """
     t = text.strip()
-
-    # If the company is actively doing something to the user, keep the clause
     if _COMPANY_ACTION_RE.search(t):
         return False
-
-    # Signal 1: prefix pattern
     if _PREFIX_RE.match(t):
         return True
-
-    # Signal 2: subject analysis
-    # Count user-subject vs company-subject pronouns
     t_lower = t.lower()
     user_count    = len(re.findall(r'\b(you|your|user\'?s?)\b', t_lower))
     company_count = len(re.findall(r'\b(we|us|our|company|service|platform)\b', t_lower))
-
-    # User is overwhelmingly the subject AND a prohibition verb is present
     prohibition_with_user = re.search(
         r'\b(?:you|users?)\b.{0,30}\b(?:must\s+not|may\s+not|shall\s+not|'
         r'cannot|agree\s+not|are\s+prohibited|are\s+not\s+(?:permitted|allowed|'
@@ -328,15 +268,9 @@ def _is_user_obligation(text: str) -> bool:
     )
     if prohibition_with_user and user_count > company_count:
         return True
-
     return False
 
-
 def _filter_user_obligations(classified: list) -> list:
-    """
-    Demotes HIGH/MEDIUM clauses that are user obligations to NONE.
-    Does not touch LOW clauses (already low-weight) or NONE clauses.
-    """
     for c in classified:
         if c.get("risk_level") in ("HIGH", "MEDIUM"):
             if _is_user_obligation(c.get("text", "")):
@@ -346,37 +280,11 @@ def _filter_user_obligations(classified: list) -> list:
     return classified
 
 def preprocess_text(text: str) -> str:
-    """
-    Universal text normalizer — runs on ALL input paths (URL fetch, paste,
-    extension DOM) before the segmenter sees the text.
-
-    The core problem: copy-paste and DOM extraction produce single newlines
-    between paragraphs. The segmenter's primary split needs double newlines.
-    Without this, pasted text produces ~30% fewer clauses and a lower score
-    than the same document fetched server-side.
-
-    This function is a lightweight safety net on top of segmenter._normalize_text().
-    It handles cases specific to each input format:
-
-      1. Tab characters → spaces (extension DOM sometimes emits these)
-      2. Windows smart quotes / dashes → ASCII equivalents
-      3. Legal section headers in ALL CAPS with no surrounding blank lines
-         → ensure blank line before them
-      4. Lines that look like "X. Title" or "(a) Title" starting a new section
-         → ensure blank line before them
-      5. Sentences ending in .!? followed by a capital on the next line
-         → insert blank line (paragraph break)
-    """
-    import re
-
-    # Normalize encoding artifacts
     text = text.replace('\t', ' ')
     text = text.replace('\u2019', "'").replace('\u2018', "'")
     text = text.replace('\u201c', '"').replace('\u201d', '"')
     text = text.replace('\u2013', '-').replace('\u2014', '-')
     text = re.sub(r'\r\n|\r', '\n', text)
-
-    # Collapse 3+ blank lines early
     text = re.sub(r'\n{3,}', '\n\n', text)
 
     lines = text.splitlines()
@@ -386,7 +294,6 @@ def preprocess_text(text: str) -> str:
         stripped = line.strip()
         out.append(line)
 
-        # Don't insert after the last line or before an already-blank line
         if i >= len(lines) - 1:
             continue
         next_stripped = lines[i + 1].strip()
@@ -395,14 +302,12 @@ def preprocess_text(text: str) -> str:
 
         inserted = False
 
-        # Rule A: current line is ALL CAPS section header
         if (stripped.isupper()
                 and 3 < len(stripped) < 120
                 and not stripped[-1].isdigit()):
             out.append('')
             inserted = True
 
-        # Rule B: next line opens a numbered/lettered section
         if not inserted and re.match(
             r'^(?:\d+[\.\)]\s|[A-Z][\.\)]\s|[a-z][\.\)]\s'
             r'|[ivxIVX]+\.\s|\([a-z0-9]\)\s'
@@ -412,7 +317,6 @@ def preprocess_text(text: str) -> str:
             out.append('')
             inserted = True
 
-        # Rule C: sentence boundary — current ends sentence, next starts capital
         if not inserted:
             if (stripped and stripped[-1] in '.!?'
                     and next_stripped and next_stripped[0].isupper()
@@ -424,32 +328,19 @@ def preprocess_text(text: str) -> str:
     result = re.sub(r'\n{3,}', '\n\n', result)
     return result.strip()
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({
-        "status": "ok",
-        "classifier_mode": CLASSIFIER_MODE,
-        "rule_method": _rule_method,
-        "version": "3.1.0",
-    })
 
-@app.route("/analyze", methods=["POST"])
-@limiter.limit("30 per minute")
-def analyze():
-    data = request.get_json(silent=True) or {}
-    text = (data.get("text") or "").strip()
-    if not text:
-        return jsonify({"error": "No text provided"}), 400
-    if len(text) < 50:
-        return jsonify({"error": "Text too short (minimum 50 characters)"}), 400
-    if len(text) > 1_500_000:
-        return jsonify({"error": "Text too large (maximum 1.5 MB)"}), 413
+# ── Shared analysis pipeline ───────────────────────────────────────────────────
+# Both /analyze and /upload-pdf funnel through here so the pipeline is identical.
 
+def _run_analysis(text: str):
+    """
+    Core analysis pipeline. Takes clean text, returns a Flask JSON response.
+    Called by both /analyze and /upload-pdf.
+    """
     t0 = time.time()
     text = preprocess_text(text)
     clauses = segment_clauses(text)
-    # Cap clause count to prevent timeout on very large documents
+
     CLAUSE_CAP = 300
     if len(clauses) > CLAUSE_CAP:
         logger.info(f"Segmented into {len(clauses)} clauses — capping at {CLAUSE_CAP}")
@@ -473,7 +364,6 @@ def analyze():
                 "matched_keywords":       res.get("matched_keywords", []),
             })
     else:
-        # Rule-based only
         for i, clause_text in enumerate(clauses):
             res  = _rule_classify(clause_text)
             cat  = res.get("category") or res.get("primary_category") or "none"
@@ -499,10 +389,10 @@ def analyze():
 
     category_scores = {
         cat: {
-            "label":         meta["label"],
-            "weight":        meta["weight"],
-            "clause_count":  len(cat_scores[cat]["clauses"]),
-            "score":         cat_scores[cat]["score"],
+            "label":          meta["label"],
+            "weight":         meta["weight"],
+            "clause_count":   len(cat_scores[cat]["clauses"]),
+            "score":          cat_scores[cat]["score"],
             "max_risk_level": _max_risk(cat_scores[cat]["clauses"]),
         }
         for cat, meta in CATEGORY_META.items()
@@ -520,6 +410,96 @@ def analyze():
         "clauses":                     classified,
     })
 
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "classifier_mode": CLASSIFIER_MODE,
+        "rule_method": _rule_method,
+        "version": "3.2.0",
+    })
+
+
+@app.route("/analyze", methods=["POST"])
+@limiter.limit("30 per minute")
+def analyze():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+    if len(text) < 50:
+        return jsonify({"error": "Text too short (minimum 50 characters)"}), 400
+    if len(text) > 1_500_000:
+        return jsonify({"error": "Text too large (maximum 1.5 MB)"}), 413
+
+    return _run_analysis(text)
+
+
+@app.route("/upload-pdf", methods=["POST"])
+@limiter.limit("20 per minute")
+def upload_pdf():
+    # Validate file presence
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded. Send the PDF as form-data with field name 'file'."}), 400
+
+    file = request.files["file"]
+
+    if not file or not file.filename:
+        return jsonify({"error": "No file selected."}), 400
+
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "File must be a PDF (.pdf extension required)."}), 400
+
+    try:
+        from pypdf import PdfReader
+        import io
+
+        raw_bytes = file.read()
+
+        if len(raw_bytes) == 0:
+            return jsonify({"error": "Uploaded file is empty."}), 400
+
+        if len(raw_bytes) > 10 * 1024 * 1024:
+            return jsonify({"error": "PDF too large (maximum 10 MB)."}), 413
+
+        reader = PdfReader(io.BytesIO(raw_bytes))
+
+        # Check if PDF is encrypted
+        if reader.is_encrypted:
+            return jsonify({"error": "PDF is password-protected. Please remove the password and try again."}), 422
+
+        text_parts = []
+        for page in reader.pages:
+            try:
+                extracted = page.extract_text()
+                if extracted:
+                    text_parts.append(extracted)
+            except Exception:
+                continue  # skip unreadable pages, don't crash
+
+        text = "\n\n".join(text_parts).strip()
+
+        if len(text) < 50:
+            return jsonify({
+                "error": (
+                    "Could not extract readable text from this PDF. "
+                    "It may be scanned or image-based. "
+                    "Try opening it in your browser, copying all the text, "
+                    "then using the URL tab instead."
+                )
+            }), 422
+
+        logger.info(f"PDF upload: {file.filename} — {len(raw_bytes):,} bytes — {len(text):,} chars extracted")
+        return _run_analysis(text)
+
+    except Exception as e:
+        logger.error(f"PDF processing error ({file.filename}): {e}")
+        return jsonify({"error": f"PDF processing failed: {str(e)}"}), 500
+
+
 @app.route("/fetch-url", methods=["POST"])
 @limiter.limit("20 per minute")
 def fetch_url():
@@ -528,7 +508,6 @@ def fetch_url():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # ── SSRF guard ────────────────────────────────────────────────────────────
     valid, reason = _validate_fetch_url(url)
     if not valid:
         logger.warning(f"Blocked fetch-url request: {reason} — url={url!r}")
@@ -585,6 +564,13 @@ def fetch_url():
         _url_log.append(url)
     logger.info(f"Fetched {url} -> {len(clean)} chars")
     return jsonify({"text": clean, "char_count": len(clean), "url": url})
+
+
+# ── 413 handler — file too large ───────────────────────────────────────────────
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({"error": "File or request too large (maximum 10 MB)."}), 413
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
