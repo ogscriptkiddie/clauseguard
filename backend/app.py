@@ -1,577 +1,1739 @@
-"""
-ClauseGuard Flask API
-======================
-Routes:
-  GET  /health           — liveness check
-  POST /analyze          — full ToS analysis (text -> risk JSON)
-  POST /fetch-url        — server-side URL fetch + clean text extraction
-  POST /upload-pdf       — PDF upload -> text extraction -> risk JSON
-"""
-import os, time, json, re, sys, logging, ipaddress, urllib.parse
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-import requests as http_requests
-from bs4 import BeautifulSoup
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
-
-# ── Request size limit — 10 MB to accommodate PDF uploads ─────────────────────
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
-
-# ── CORS — restrict to known safe origins ─────────────────────────────────────
-_raw_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
-_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-if not _allowed_origins:
-    _allowed_origins = [
-        "https://clauseguard-production-183f.up.railway.app",
-        "https://clauseguard-chi.vercel.app",
-        "http://localhost:5000",
-        "http://127.0.0.1:5000",
-    ]
-CORS(app, origins=_allowed_origins + ["chrome-extension://*"])
-
-# ── Rate limiting ──────────────────────────────────────────────────────────────
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "60 per hour"],
-    storage_uri="memory://",
-)
-
-# ── SSRF guard ────────────────────────────────────────────────────────────────
-_BLOCKED_HOSTS = frozenset({
-    "localhost", "localhost.", "metadata.google.internal",
-})
-_BLOCKED_SCHEMES = frozenset({"file", "ftp", "data", "javascript", "gopher"})
-
-def _validate_fetch_url(url: str):
-    try:
-        parsed = urllib.parse.urlparse(url)
-    except Exception:
-        return False, "Invalid URL"
-
-    scheme = (parsed.scheme or "").lower()
-    if scheme in _BLOCKED_SCHEMES:
-        return False, f"URL scheme '{scheme}' is not allowed"
-    if scheme not in ("http", "https"):
-        return False, "Only http:// and https:// URLs are supported"
-
-    hostname = (parsed.hostname or "").lower().rstrip(".")
-    if not hostname:
-        return False, "URL has no hostname"
-
-    if hostname in _BLOCKED_HOSTS:
-        return False, "Requests to internal addresses are not allowed"
-
-    if hostname.endswith((".local", ".internal", ".localhost", ".corp", ".lan")):
-        return False, "Requests to internal addresses are not allowed"
-
-    try:
-        ip = ipaddress.ip_address(hostname)
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
-            return False, "Requests to internal addresses are not allowed"
-    except ValueError:
-        pass
-
-    return True, ""
-
-# ── Rule-based classifier ──────────────────────────────────────────────────────
-from classifier import RuleBasedClassifier
-rule_classifier = RuleBasedClassifier()
-
-_rule_method = None
-for _m in ["classify", "classify_clause", "classify_text", "predict", "run", "analyse", "analyze"]:
-    if hasattr(rule_classifier, _m) and callable(getattr(rule_classifier, _m)):
-        _rule_method = _m
-        logger.info(f"RuleBasedClassifier method: .{_m}()")
-        break
-if _rule_method is None:
-    for _m in dir(rule_classifier):
-        if not _m.startswith("_") and callable(getattr(rule_classifier, _m)):
-            _rule_method = _m
-            logger.warning(f"RuleBasedClassifier fallback method: .{_m}()")
-            break
-
-def _rule_classify(text):
-    if _rule_method is None:
-        return {}
-    try:
-        result = getattr(rule_classifier, _rule_method)(text)
-        if isinstance(result, list):
-            if not result:
-                return {}
-            result = sorted(result, key=lambda x: x.get("confidence", 0), reverse=True)[0]
-        return result or {}
-    except Exception as e:
-        logger.warning(f"Rule classify error: {e}")
-        return {}
-
-# ── Hybrid classifier ──────────────────────────────────────────────────────────
-try:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from ml.hybrid import HybridClassifier
-    classifier = HybridClassifier(rule_based_classifier=rule_classifier)
-    logger.info("HybridClassifier loaded (ML + rule-based fallback)")
-    CLASSIFIER_MODE = "hybrid"
-except Exception as e:
-    logger.warning(f"HybridClassifier unavailable ({e}), rule-based only")
-    classifier = None
-    CLASSIFIER_MODE = "rule_based"
-
-# ── spaCy segmenter ────────────────────────────────────────────────────────────
-def _fallback_segmenter(text):
-    parts = re.split(r'\n{2,}|\n(?=\s*\d+[\.\)]\s+[A-Z])|\n(?=\s*[A-Z][A-Z\s]{4,}$)', text)
-    segments = []
-    for p in parts:
-        p = p.strip()
-        if len(p) < 40:
-            continue
-        if len(p) > 1200:
-            sents = re.split(r'(?<=[.!?])\s+(?=[A-Z])', p)
-            buf = ""
-            for sent in sents:
-                buf += " " + sent
-                if len(buf) >= 300:
-                    segments.append(buf.strip())
-                    buf = ""
-            if buf.strip():
-                segments.append(buf.strip())
-        else:
-            segments.append(p)
-    return segments if segments else [text[:2000]]
-
-try:
-    import segmenter as _seg_module
-    segment_clauses = (
-        getattr(_seg_module, "segment_clauses", None) or
-        getattr(_seg_module, "segment", None) or
-        getattr(_seg_module, "segmentClauses", None) or
-        getattr(_seg_module, "get_clauses", None) or
-        getattr(_seg_module, "segment_document", None) or
-        getattr(_seg_module, "segment_document_numbered", None)
-    )
-    if segment_clauses is None:
-        raise AttributeError("No recognised segmenter function in segmenter.py")
-    logger.info("spaCy segmenter loaded")
-except Exception as e:
-    logger.warning(f"spaCy segmenter unavailable ({e}), using fallback")
-    segment_clauses = _fallback_segmenter
-
-# ── Category metadata ──────────────────────────────────────────────────────────
-_URL_LOG_MAX = 500
-CATEGORY_META = {
-    "data_sharing":         {"label": "Data Sharing",         "weight": 0.22},
-    "tracking_profiling":   {"label": "Tracking & Profiling", "weight": 0.20},
-    "third_party_access":   {"label": "Third-Party Access",   "weight": 0.13},
-    "data_retention":       {"label": "Data Retention",       "weight": 0.13},
-    "arbitration":          {"label": "Arbitration",          "weight": 0.13},
-    "content_rights":       {"label": "Content & IP Rights",  "weight": 0.10},
-    "liability_limitation": {"label": "Liability Limitation", "weight": 0.09},
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ClauseGuard — Legal Risk Intelligence</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 38'%3E%3Cpath d='M17 1L32 9V22C32 30 17 37 17 37C17 37 2 30 2 22V9L17 1Z' fill='%23EDE7DC' stroke='%23C41E1E' stroke-width='1.2'/%3E%3Cpath d='M17 4L30 11V22C30 28.5 17 35 17 35C17 35 4 28.5 4 22V11L17 4Z' fill='none' stroke='%23C41E1E' stroke-width='.4' opacity='.35'/%3E%3Cpath d='M20.5 13.5C18.8 12.4 16.2 12.7 14.5 14.4C12.8 16.1 12.8 19 14.5 20.7C16.2 22.4 18.8 22.7 20.5 21.5' stroke='%23C41E1E' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3Cline x1='20.5' y1='17.5' x2='17' y2='17.5' stroke='%23C41E1E' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;0,900;1,400;1,700;1,900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..500&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ═══════════════════════════════════════════════════════
+   TOKENS — WARM EDITORIAL LIGHT
+═══════════════════════════════════════════════════════ */
+:root{
+  --parchment:#F4F0E8;
+  --parchment2:#EDE7DC;
+  --parchment3:#E2DACE;
+  --parchment4:#D6CEBF;
+  --ink:#1A1714;
+  --ink2:#4D4843;
+  --ink3:#8A847C;
+  --ink4:#B8B2AA;
+  --red:#C41E1E;
+  --red2:#A31818;
+  --amber:#B45309;
+  --forest:#166534;
+  --gold:#92600A;
+  --red-bg:rgba(196,30,30,.07);
+  --amber-bg:rgba(180,83,9,.07);
+  --forest-bg:rgba(22,101,52,.07);
+  --ease:cubic-bezier(.4,0,.2,1);
+  --ease-out:cubic-bezier(0,0,.2,1);
 }
-RISK_SCORE = {"HIGH": 100, "MEDIUM": 60, "LOW": 25, "NONE": 0}
-_url_log = []
+*,::before,::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;font-size:16px}
+body{
+  background:var(--parchment);
+  color:var(--ink);
+  font-family:'DM Sans',sans-serif;
+  overflow-x:hidden;
+}
 
-# ── Scoring ────────────────────────────────────────────────────────────────────
-def _score_from_clauses(risk_clauses):
-    cat_scores = {k: {"clauses": [], "score": 0} for k in CATEGORY_META}
-    for c in risk_clauses:
-        cat = c.get("category", "none")
-        if cat not in cat_scores:
-            continue
-        base  = RISK_SCORE.get(c.get("risk_level", "NONE"), 0)
-        cat_scores[cat]["clauses"].append(c)
-        n     = len(cat_scores[cat]["clauses"])
-        bonus = min((n - 1) * 5, 10)
-        cat_scores[cat]["score"] = min(base + bonus, 100)
+/* Paper texture */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity:.028;mix-blend-mode:multiply;
+}
 
-    total_weight = sum(CATEGORY_META[k]["weight"] for k in cat_scores)
-    weighted_sum = sum(cat_scores[k]["score"] * CATEGORY_META[k]["weight"] for k in cat_scores)
-    final_score  = round(weighted_sum / total_weight) if total_weight else 0
-    risk_level   = "HIGH" if final_score >= 60 else "MEDIUM" if final_score >= 30 else "LOW"
-    return final_score, risk_level, cat_scores
+/* ── CURSOR — Custom Anathema ────────────────────────── */
+*{cursor:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACc0lEQVR4nO3VPWgUQRQH8P/Mfl6CosZGhEjInYVgFcEmwUIIJBbaCCckVQoNmMIidqYJghBSeNZHsDtQEK7QqNiYFDYpbfyCC/GDhEP3bu9uj9l5z2IuJ4gYNfcBcg8eC8vMvt/OzpsFuh2FdPpwN+tLAJcL6fT1bgIEM98tpNPT3QJACCEBZAtTUxe7AmBmAHBAlNucmTnfWYCUAADWGgB8ED3ams521GAEOLHHaIDIHr8aX7+dEcAwnEA2wZgVoGZAaIjAJ5+WVwcbj/AsgApISwLIDIQZjDzMRA9315ePt5egOdBui5g22YfxLGBmBxirZ/tZDJH2wdIJCA8D8JxIIQAK9WEsFJAHJ9irZ/sZDIH2wKQrmuKN5Lr9SaCmc1VqTOsVH57aSnRcoDo74fs64PwPMB1ASkNYjeVAtdqoGr1HEXRg88LC05rAY03l74P6fsQjgOqVkFRZAC1WvNKYXiBwvD+1uysbBXAFo4DeB6E1mYveB64XDYFPQ8ATIeg0R212hWKohKAa60AmDa0bQjLaq6C9H3oIACVSqAwhK5UTAYBKAxBYXj1w8TEnVYAbBCZ3W/b5jwwn4Mpim7pcvkFa50UjpMCUZKVSrFSSVbqENfrN9+Ojn5Lra/vC2Kz1qbtGocQpARc997w6urtxphXP096NzY2wEqlWOvkm5GRgZMbG8V/BlAUNXu+8UN6KCzrxu8mJdfWigCKv8L9NYArld1eByv1krWeHlxZof0++I8Bulw2K8D8mpW6NJjNRp0qbgBBAMTxRxBNnsjlvnayOADYFIYB4nhyKJ/f7HRxAMD78XGx96he9KIX/3F8B/1cUyF9Cq2vAAAAAElFTkSuQmCC') 1 3, auto !important}
 
-def _max_risk(clauses):
-    for r in ["HIGH", "MEDIUM", "LOW", "NONE"]:
-        if any(c.get("risk_level") == r for c in clauses):
-            return r
-    return "NONE"
+/* ── NAV ─────────────────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:0 64px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+  transition:background .4s,border-color .4s,box-shadow .4s;
+  border-bottom:1px solid transparent;
+}
+nav.scrolled{
+  background:rgba(244,240,232,.94);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  border-bottom-color:var(--parchment3);
+  box-shadow:0 1px 0 var(--parchment3);
+}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.nav-logo svg{width:28px;height:32px}
+.nav-wordmark{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;letter-spacing:-.2px;color:var(--ink)}
+.nav-wordmark em{color:var(--red);font-style:normal}
+.nav-right{display:flex;align-items:center;gap:28px}
+.nav-status{
+  display:flex;align-items:center;gap:7px;
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:2px;text-transform:uppercase;color:var(--ink3);
+}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse-dot 2.5s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}50%{box-shadow:0 0 0 5px rgba(34,197,94,0)}}
+.nav-link{
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--ink3);text-decoration:none;
+  transition:color .2s;
+}
+.nav-link:hover{color:var(--ink)}
 
-def _summary(score, level, n_flagged, n_total):
-    if level == "HIGH":
-        return (f"This document contains {n_flagged} high-risk clause(s) out of "
-                f"{n_total} analyzed. Significant privacy and legal risks detected.")
-    if level == "MEDIUM":
-        return (f"{n_flagged} clause(s) of concern found across {n_total} analyzed. "
-                f"Some data handling and liability provisions warrant attention.")
-    return (f"Low risk detected. {n_flagged} minor clause(s) found across {n_total} analyzed.")
+/* ── HERO ─────────────────────────────────────────────── */
+#hero{
+  position:relative;min-height:100vh;
+  display:flex;align-items:center;
+  background:var(--parchment);
+  overflow:hidden;padding:0 64px;
+}
+#hero-canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.5}
 
-# ── User obligation filter ─────────────────────────────────────────────────────
-_PREFIX_RE = re.compile(
-    r"""(?xi)
-    ^\s*
-    (?:
-        you\s+(?:must\s+not|may\s+not|shall\s+not|will\s+not|cannot|can\s+not|
-                 agree\s+not\s+to|are\s+not\s+(?:permitted|allowed|authorized|
-                 entitled)|are\s+prohibited\s+from|are\s+strictly\s+prohibited)
-      |
-        (?:users?\s+)?
-        (?:must\s+not|may\s+not|shall\s+not|cannot|are\s+not\s+(?:permitted|
-           allowed|authorized)|are\s+prohibited|is\s+prohibited|are\s+forbidden)
-      |
-        (?:please\s+)?don\'?t\b
-      |
-        do\s+not\b
-      |
-        (?:the\s+following\s+(?:activities?\s+)?(?:is|are)\s+)?
-        (?:prohibited|forbidden|not\s+(?:permitted|allowed))
-      |
-        (?:[ivxIVX]+\.|[a-z]\)|\d+[\.\)])\s+
-        (?:don\'?t|do\s+not|you\s+(?:must\s+not|may\s+not|shall\s+not|cannot))
-    )
-    """,
-    re.IGNORECASE,
-)
+.hero-inner{
+  position:relative;z-index:2;
+  max-width:1200px;width:100%;
+  display:grid;grid-template-columns:1fr 320px;
+  gap:80px;align-items:center;
+  padding-top:60px;
+}
+@media(max-width:900px){
+  .hero-inner{grid-template-columns:1fr;gap:48px}
+  #hero{padding:0 24px}
+}
 
-_COMPANY_ACTION_RE = re.compile(
-    r"""(?xi)
-    \b
-    (?:we|us|our|the\s+company|the\s+service|the\s+platform)
-    \s+
-    (?:may|will|can|shall|collect|share|sell|transfer|retain|store|
-       disclose|provide|use|process|track|monitor|access|transmit|
-       combine|infer|profile|send|distribute)
-    \b
-    """,
-    re.IGNORECASE,
-)
+/* Thin vertical rule — editorial detail */
+.hero-inner::before{
+  content:'';position:absolute;
+  left:-64px;top:10%;bottom:10%;
+  width:1px;background:var(--parchment4);
+  display:none;
+}
 
-def _is_user_obligation(text: str) -> bool:
-    t = text.strip()
-    if _COMPANY_ACTION_RE.search(t):
-        return False
-    if _PREFIX_RE.match(t):
-        return True
-    t_lower = t.lower()
-    user_count    = len(re.findall(r'\b(you|your|user\'?s?)\b', t_lower))
-    company_count = len(re.findall(r'\b(we|us|our|company|service|platform)\b', t_lower))
-    prohibition_with_user = re.search(
-        r'\b(?:you|users?)\b.{0,30}\b(?:must\s+not|may\s+not|shall\s+not|'
-        r'cannot|agree\s+not|are\s+prohibited|are\s+not\s+(?:permitted|allowed|'
-        r'authorized)|are\s+forbidden)\b',
-        t_lower,
-    )
-    if prohibition_with_user and user_count > company_count:
-        return True
-    return False
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:'DM Mono',monospace;font-size:10px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:24px;
+}
+.hero-eyebrow-line{width:24px;height:1px;background:var(--red)}
 
-def _filter_user_obligations(classified: list) -> list:
-    for c in classified:
-        if c.get("risk_level") in ("HIGH", "MEDIUM"):
-            if _is_user_obligation(c.get("text", "")):
-                c["risk_level"] = "NONE"
-                c["category"]   = "none"
-                c["primary_category"] = "none"
-    return classified
+.hero-h1{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(60px,8.5vw,128px);
+  font-weight:900;line-height:.9;
+  letter-spacing:-4px;
+  color:var(--ink);
+  margin-bottom:28px;
+}
+.hero-h1 em{
+  font-style:italic;color:var(--red);
+}
+.hero-h1 .h1-ghost{
+  -webkit-text-stroke:2px var(--red);
+  color:transparent;
+  opacity:.55;
+}
 
-def preprocess_text(text: str) -> str:
-    text = text.replace('\t', ' ')
-    text = text.replace('\u2019', "'").replace('\u2018', "'")
-    text = text.replace('\u201c', '"').replace('\u201d', '"')
-    text = text.replace('\u2013', '-').replace('\u2014', '-')
-    text = re.sub(r'\r\n|\r', '\n', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+.hero-sub{
+  font-size:17px;font-weight:300;
+  color:var(--ink2);line-height:1.75;
+  max-width:400px;margin-bottom:40px;
+  letter-spacing:.1px;
+}
 
-    lines = text.splitlines()
-    out = []
+.hero-cta{
+  display:inline-flex;align-items:center;gap:12px;
+  padding:14px 36px;
+  background:var(--ink);color:var(--parchment);
+  font-family:'DM Mono',monospace;font-size:10.5px;
+  font-weight:500;letter-spacing:2px;text-transform:uppercase;
+  border:none;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+  transition:background .2s,transform .15s,box-shadow .2s;
+}
+.hero-cta:hover{background:var(--red);transform:translateY(-2px);box-shadow:0 10px 28px rgba(196,30,30,.2)}
+.hero-cta svg{width:12px;height:12px}
 
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        out.append(line)
+/* Hero stats card */
+.hero-card{
+  background:var(--parchment2);
+  border:1px solid var(--parchment3);
+  padding:0;
+  position:relative;
+}
+/* Top colored bar */
+.hero-card::before{
+  content:'';position:absolute;
+  top:0;left:0;right:0;height:3px;
+  background:var(--red);
+}
 
-        if i >= len(lines) - 1:
-            continue
-        next_stripped = lines[i + 1].strip()
-        if not next_stripped or not stripped:
-            continue
+.hc-stat{
+  padding:20px 24px;
+  border-bottom:1px solid var(--parchment3);
+  display:flex;flex-direction:column;gap:4px;
+}
+.hc-stat:last-child{border-bottom:none}
+.hc-n{
+  font-family:'Playfair Display',serif;
+  font-size:40px;font-weight:900;
+  color:var(--red);line-height:1;letter-spacing:-1.5px;
+}
+.hc-l{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:2px;text-transform:uppercase;
+  color:var(--ink3);line-height:1.4;
+}
 
-        inserted = False
+/* Hero scroll indicator */
+.hero-scroll{
+  position:absolute;bottom:32px;left:64px;
+  display:flex;align-items:center;gap:10px;
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:2.5px;text-transform:uppercase;color:var(--ink4);
+  animation:bob 2.8s ease-in-out infinite;
+}
+.hero-scroll-line{width:28px;height:1px;background:var(--parchment4)}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
 
-        if (stripped.isupper()
-                and 3 < len(stripped) < 120
-                and not stripped[-1].isdigit()):
-            out.append('')
-            inserted = True
+/* ── TICKER ───────────────────────────────────────────── */
+/* ── EVIDENCE STRIP ───────────────────────────────────── */
+.evidence-strip{
+  background:var(--ink);
+  padding:20px 64px;
+  position:relative;z-index:2;
+  overflow:hidden;
+}
+.evidence-strip::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(
+    90deg,
+    rgba(255,255,255,.015) 0px,
+    rgba(255,255,255,.015) 1px,
+    transparent 1px,
+    transparent 60px
+  );
+  pointer-events:none;
+}
+.evidence-inner{
+  max-width:1200px;margin:0 auto;
+  display:flex;align-items:center;gap:8px;
+  flex-wrap:wrap;
+}
+.ev-label{
+  font-family:'DM Mono',monospace;font-size:8.5px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.2);
+  margin-right:8px;flex-shrink:0;
+}
+.ev-pill{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:1.2px;text-transform:uppercase;
+  color:rgba(255,255,255,.45);
+  border:1px solid rgba(255,255,255,.1);
+  padding:5px 12px;
+  white-space:nowrap;
+  transition:color .2s,border-color .2s,background .2s;
+}
+.ev-pill:hover{color:rgba(255,255,255,.85);border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.04)}
+.ev-pill.high{color:rgba(196,30,30,.8);border-color:rgba(196,30,30,.25);background:rgba(196,30,30,.05)}
+.ev-pill.high:hover{color:var(--red);border-color:rgba(196,30,30,.5)}
+@media(max-width:768px){.evidence-strip{padding:16px 24px}}
 
-        if not inserted and re.match(
-            r'^(?:\d+[\.\)]\s|[A-Z][\.\)]\s|[a-z][\.\)]\s'
-            r'|[ivxIVX]+\.\s|\([a-z0-9]\)\s'
-            r'|Section\s+\d|Article\s+[IVXLC\d])',
-            next_stripped
-        ):
-            out.append('')
-            inserted = True
+/* ── REVEAL ───────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .65s var(--ease),transform .65s var(--ease)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:.1s}
+.reveal-delay-2{transition-delay:.2s}
+.reveal-delay-3{transition-delay:.3s}
 
-        if not inserted:
-            if (stripped and stripped[-1] in '.!?'
-                    and next_stripped and next_stripped[0].isupper()
-                    and len(stripped.split()) >= 5
-                    and len(next_stripped.split()) >= 4):
-                out.append('')
+/* ── ANALYZER ─────────────────────────────────────────── */
+#analyzer{
+  background:var(--parchment);
+  padding:112px 64px;
+  position:relative;
+}
+/* Subtle top rule */
+#analyzer::before{
+  content:'';position:absolute;
+  top:0;left:64px;right:64px;height:1px;
+  background:var(--parchment3);
+}
 
-    result = '\n'.join(out)
-    result = re.sub(r'\n{3,}', '\n\n', result)
-    return result.strip()
+.section-tag{
+  font-family:'DM Mono',monospace;
+  font-size:9.5px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--ink4);
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:48px;
+}
+.section-tag::before{content:'';width:20px;height:1px;background:var(--red)}
+
+.analyzer-grid{
+  max-width:1200px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 360px;
+  gap:80px;align-items:start;
+}
+@media(max-width:900px){.analyzer-grid{grid-template-columns:1fr}}
+
+.input-heading{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(28px,3vw,42px);
+  font-weight:700;color:var(--ink);
+  line-height:1.1;letter-spacing:-.8px;margin-bottom:32px;
+}
+.input-heading em{font-style:italic;color:var(--red)}
+
+/* Tabs */
+.tabs{
+  display:flex;
+  border-bottom:1px solid var(--parchment3);
+  margin-bottom:24px;
+}
+.tab-btn{
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--ink3);background:none;border:none;
+  padding:10px 18px 10px 0;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:color .2s,border-color .2s;
+}
+.tab-btn.active{color:var(--ink);border-bottom-color:var(--red)}
+
+/* URL input */
+.url-row{
+  display:flex;
+  border:1px solid var(--parchment3);
+  background:var(--parchment2);
+  transition:border-color .2s,box-shadow .2s;
+  margin-bottom:12px;
+}
+.url-row:focus-within{border-color:var(--ink2);box-shadow:0 0 0 3px rgba(26,23,20,.06)}
+.url-in{
+  flex:1;background:none;border:none;
+  padding:13px 16px;
+  font-family:'DM Mono',monospace;font-size:12.5px;
+  color:var(--ink);outline:none;
+}
+.url-in::placeholder{color:var(--ink4)}
+.url-go{
+  background:var(--ink);border:none;
+  padding:0 24px;
+  font-family:'DM Mono',monospace;font-size:10px;
+  font-weight:500;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--parchment);transition:background .15s;
+}
+.url-go:hover{background:var(--red)}
+.url-go:disabled{opacity:.35}
+
+.quick-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;align-items:center}
+.ql-sep{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--ink4);text-transform:uppercase}
+.ql{
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  color:var(--ink3);background:var(--parchment2);
+  border:1px solid var(--parchment3);padding:5px 11px;
+  transition:all .15s;
+}
+.ql:hover{color:var(--ink);border-color:var(--ink3);background:var(--parchment)}
+
+.fetch-msg{font-family:'DM Mono',monospace;font-size:10.5px;min-height:18px;margin-bottom:4px}
+.fetch-msg.ok{color:var(--forest)}
+.fetch-msg.err{color:var(--red)}
+.fetch-msg.wait{color:var(--ink3)}
+
+.paste-ta{
+  width:100%;height:200px;
+  background:var(--parchment2);
+  border:1px solid var(--parchment3);
+  padding:16px;color:var(--ink);
+  font-family:'DM Mono',monospace;font-size:12px;
+  line-height:1.7;resize:vertical;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.paste-ta:focus{border-color:var(--ink2);box-shadow:0 0 0 3px rgba(26,23,20,.06)}
+.paste-ta::placeholder{color:var(--ink4)}
+
+/* ── PDF UPLOAD ───────────────────────────────────────── */
+.pdf-drop{
+  position:relative;
+  border:1px dashed var(--parchment4);
+  background:var(--parchment2);
+  padding:40px 24px;
+  text-align:center;
+  transition:border-color .2s,background .2s;
+  margin-bottom:4px;
+}
+.pdf-drop.drag-over{border-color:var(--red);background:rgba(196,30,30,.04)}
+.pdf-drop input[type=file]{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;cursor:pointer;
+}
+.pdf-drop-icon{
+  width:28px;height:28px;
+  margin:0 auto 14px;
+  opacity:.3;
+}
+.pdf-drop-label{
+  display:block;
+  font-family:'DM Mono',monospace;font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:6px;
+}
+.pdf-drop-sub{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:var(--ink4);
+}
+.pdf-file-chosen{
+  display:none;
+  font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--forest);letter-spacing:.3px;
+  margin-top:10px;
+}
+.pdf-file-chosen.on{display:block}
+
+.sample-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+
+.input-bottom{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:20px;padding-top:16px;
+  border-top:1px solid var(--parchment3);
+}
+.char-ct{font-family:'DM Mono',monospace;font-size:10px;color:var(--ink4)}
+.run-btn{
+  font-family:'DM Mono',monospace;font-size:10px;
+  font-weight:500;letter-spacing:2px;text-transform:uppercase;
+  padding:12px 34px;
+  background:var(--ink);color:var(--parchment);border:none;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+  transition:background .15s,transform .1s,box-shadow .2s;
+}
+.run-btn:hover{background:var(--red);transform:translateY(-2px);box-shadow:0 6px 20px rgba(196,30,30,.18)}
+.run-btn:disabled{opacity:.3;transform:none;box-shadow:none}
+
+/* ── SIDEBAR ──────────────────────────────────────────── */
+.sidebar-card{
+  background:var(--parchment2);
+  border:1px solid var(--parchment3);
+  padding:22px;margin-bottom:10px;
+  transition:border-color .2s;
+}
+.sidebar-card:hover{border-color:var(--parchment4)}
+.sidebar-title{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:16px;
+}
+.risk-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--parchment3);
+  font-size:13px;color:var(--ink2);font-weight:300;
+}
+.risk-row:last-child{border-bottom:none}
+.risk-weight{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--ink3)}
+
+/* ── SCANNING ─────────────────────────────────────────── */
+#scan-wrap{display:none;padding:64px 0;text-align:center}
+#scan-wrap.on{display:block}
+.scan-ring{
+  width:56px;height:56px;margin:0 auto 18px;position:relative;
+}
+.scan-ring::before,.scan-ring::after{content:'';position:absolute;inset:0;border-radius:50%;}
+.scan-ring::before{border:1px solid var(--parchment3)}
+.scan-ring::after{border:1px solid transparent;border-top-color:var(--red);animation:spin .85s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-title{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--ink3)}
+.scan-sub{margin-top:8px;font-family:'DM Mono',monospace;font-size:9.5px;color:var(--ink4);min-height:16px}
+
+/* ── ERROR ────────────────────────────────────────────── */
+#err-block{
+  display:none;margin-top:16px;
+  padding:13px 16px;
+  border-left:2px solid var(--red);
+  background:var(--red-bg);
+  font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--red);line-height:1.6;
+}
+#err-block.on{display:block}
+
+/* ── RESULTS ──────────────────────────────────────────── */
+#results{display:none;margin-top:64px}
+#results.on{display:block}
+
+.result-header{
+  display:grid;grid-template-columns:200px 1fr;gap:28px;
+  margin-bottom:48px;padding-bottom:48px;
+  border-bottom:1px solid var(--parchment3);
+}
+@media(max-width:640px){.result-header{grid-template-columns:1fr}}
+
+.score-panel{
+  background:var(--parchment2);
+  border:1px solid var(--parchment3);
+  padding:28px 20px;text-align:center;
+  position:relative;overflow:hidden;
+}
+.score-panel::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:var(--score-accent,var(--parchment3));
+  transition:background .5s;
+}
+.score-eyebrow{
+  font-family:'DM Mono',monospace;font-size:8px;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--ink4);margin-bottom:14px;
+}
+.ring-wrap{width:100px;height:100px;margin:0 auto 12px;position:relative}
+.ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--parchment3);stroke-width:2.5}
+.ring-fg{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-dasharray:339;stroke-dashoffset:339;transition:stroke-dashoffset 1.2s var(--ease),stroke .5s}
+.ring-num{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:'Playfair Display',serif;font-size:34px;font-weight:900;
+  color:var(--ink);letter-spacing:-1px;
+}
+.score-badge{
+  display:inline-block;
+  font-family:'DM Mono',monospace;font-size:8px;
+  letter-spacing:2px;text-transform:uppercase;
+  padding:3px 10px;border:1px solid;margin-top:5px;
+}
+.score-badge.H{color:var(--red);border-color:var(--red);background:var(--red-bg)}
+.score-badge.M{color:var(--amber);border-color:var(--amber);background:var(--amber-bg)}
+.score-badge.L{color:var(--forest);border-color:var(--forest);background:var(--forest-bg)}
+
+.result-summary{display:flex;flex-direction:column;gap:16px;justify-content:center}
+.result-verdict{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(20px,2.3vw,29px);
+  font-weight:700;color:var(--ink);
+  line-height:1.2;letter-spacing:-.3px;
+}
+.result-body{font-size:14px;font-weight:300;color:var(--ink2);line-height:1.8}
+.result-meta{
+  display:flex;gap:24px;flex-wrap:wrap;
+  padding-top:16px;border-top:1px solid var(--parchment3);
+}
+.meta-item{display:flex;flex-direction:column;gap:3px}
+.meta-n{
+  font-family:'Playfair Display',serif;font-size:26px;font-weight:700;
+  color:var(--ink);letter-spacing:-1px;line-height:1;
+}
+.meta-l{
+  font-family:'DM Mono',monospace;font-size:8.5px;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--ink4);
+}
+
+/* Category grid */
+.cat-label-row{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:var(--ink4);margin-bottom:12px;
+}
+.cat-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));
+  gap:1px;margin-bottom:48px;
+  border:1px solid var(--parchment3);
+  background:var(--parchment3);
+}
+.cat-tile{
+  background:var(--parchment);padding:16px 14px;
+  opacity:0;transform:translateY(8px);
+  animation:tileIn .3s forwards;
+  transition:background .2s;
+}
+.cat-tile:hover{background:var(--parchment2)}
+@keyframes tileIn{to{opacity:1;transform:translateY(0)}}
+.ct-n{
+  font-family:'Playfair Display',serif;font-size:24px;font-weight:700;
+  color:var(--parchment3);float:right;line-height:1;
+}
+.ct-name{
+  font-family:'DM Mono',monospace;font-size:8px;
+  letter-spacing:.5px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:12px;padding-right:22px;
+  line-height:1.5;clear:both;
+}
+.ct-track{height:1.5px;background:var(--parchment3);margin-bottom:7px;overflow:hidden}
+.ct-bar{height:100%;width:0;transition:width 1s var(--ease)}
+.ct-bar.H{background:var(--red)}.ct-bar.M{background:var(--amber)}.ct-bar.L{background:var(--forest)}.ct-bar.N{background:var(--parchment4)}
+.ct-risk{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:1px;text-transform:uppercase}
+.ct-risk.H{color:var(--red)}.ct-risk.M{color:var(--amber)}.ct-risk.L{color:var(--forest)}.ct-risk.N{color:var(--ink4)}
+
+/* ── RISK GROUPS ──────────────────────────────────────── */
+.clauses-label{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:var(--ink4);margin-bottom:12px;
+}
+.risk-summary-bar{
+  display:flex;border:1px solid var(--parchment3);
+  background:var(--parchment2);margin-bottom:24px;
+}
+.rsb-item{
+  flex:1;padding:13px 16px;
+  border-right:1px solid var(--parchment3);
+  display:flex;flex-direction:column;gap:3px;
+}
+.rsb-item:last-child{border-right:none}
+.rsb-n{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;line-height:1}
+.rsb-n.H{color:var(--red)}.rsb-n.M{color:var(--amber)}.rsb-n.L{color:var(--forest)}
+.rsb-l{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink4)}
+
+.risk-group{margin-bottom:24px}
+.risk-group-header{
+  display:flex;align-items:center;gap:9px;
+  margin-bottom:9px;padding-bottom:7px;
+  border-bottom:1px solid var(--parchment3);
+}
+.risk-group-icon{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.risk-group-icon.H{background:var(--red)}
+.risk-group-icon.M{background:var(--amber)}
+.risk-group-icon.L{background:var(--forest)}
+.risk-group-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;flex:1}
+.risk-group-title.H{color:var(--red)}.risk-group-title.M{color:var(--amber)}.risk-group-title.L{color:var(--forest)}
+.risk-group-count{font-family:'DM Mono',monospace;font-size:9px;color:var(--ink4);letter-spacing:1px}
+.low-overflow{display:none}.low-overflow.open{display:block}
+.show-more-btn{
+  width:100%;margin-top:6px;padding:10px 16px;
+  background:var(--parchment2);
+  border:1px dashed var(--parchment3);
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--ink4);text-align:center;transition:all .2s;
+}
+.show-more-btn:hover{background:var(--parchment);border-color:var(--ink4);color:var(--ink2)}
+
+/* Clause cards */
+.clause-stack{display:flex;flex-direction:column;gap:3px}
+.clause-card{
+  background:var(--parchment2);
+  border:1px solid var(--parchment3);
+  border-left:3px solid;
+  opacity:0;transform:translateX(-10px);
+  animation:cIn .3s forwards;
+  transition:background .2s,box-shadow .2s;
+}
+.clause-card:hover{background:var(--parchment);box-shadow:0 2px 12px rgba(26,23,20,.06)}
+@keyframes cIn{to{opacity:1;transform:translateX(0)}}
+.clause-card.H{border-left-color:var(--red)}
+.clause-card.M{border-left-color:var(--amber)}
+.clause-card.L{border-left-color:var(--forest)}
+
+.cc-top{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:15px 16px 11px;gap:12px;
+}
+.cc-left{flex:1}
+.cc-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.badge{
+  font-family:'DM Mono',monospace;font-size:7.5px;
+  letter-spacing:1.5px;text-transform:uppercase;padding:2px 7px;border:1px solid;
+}
+.badge.H{color:var(--red);border-color:var(--red);background:var(--red-bg)}
+.badge.M{color:var(--amber);border-color:var(--amber);background:var(--amber-bg)}
+.badge.L{color:var(--forest);border-color:var(--forest);background:var(--forest-bg)}
+.badge-cat{font-family:'DM Mono',monospace;font-size:8.5px;color:var(--ink3)}
+.badge-num{font-family:'DM Mono',monospace;font-size:8.5px;color:var(--ink4)}
+.cc-text{font-size:13.5px;font-weight:400;color:var(--ink2);line-height:1.7}
+.cc-toggle{
+  font-family:'DM Mono',monospace;font-size:8.5px;
+  letter-spacing:1px;text-transform:uppercase;
+  color:var(--ink3);background:none;
+  border:1px solid var(--parchment3);
+  padding:4px 10px;transition:all .15s;
+  align-self:flex-start;flex-shrink:0;margin-top:1px;
+}
+.cc-toggle:hover{color:var(--ink);border-color:var(--ink3)}
+.cc-kws{padding:0 16px 11px;display:flex;flex-wrap:wrap;gap:4px}
+.cc-meaning{
+  margin:0 16px 12px;padding:10px 13px;
+  border-left:2px solid var(--parchment3);
+  background:var(--parchment);
+}
+.cc-meaning-label{
+  font-family:'DM Mono',monospace;font-size:7.5px;
+  letter-spacing:2.5px;text-transform:uppercase;color:var(--ink4);margin-bottom:5px;
+}
+.cc-meaning-text{font-size:12.5px;font-weight:400;color:var(--ink2);line-height:1.7}
+.cc-meaning-text strong{font-weight:500;color:var(--ink)}
+.kw-pill{
+  font-family:'DM Mono',monospace;font-size:8.5px;
+  color:var(--gold);background:rgba(146,96,10,.06);
+  border:1px solid rgba(146,96,10,.15);padding:2px 7px;
+}
+.cc-raw{
+  display:none;margin:0 16px 16px;padding:12px;
+  background:var(--parchment);border:1px solid var(--parchment3);
+  font-family:'DM Mono',monospace;font-size:10.5px;
+  color:var(--ink3);line-height:1.75;
+}
+.cc-raw.open{display:block}
+
+/* ── MODEL SCENE ──────────────────────────────────────── */
+#model-scene{width:100%;height:240px;margin-top:16px;background:transparent;border:none}
+#model-canvas{width:100%;height:100%}
+
+/* ── ABOUT ────────────────────────────────────────────── */
+#about{
+  background:var(--ink);
+  color:var(--parchment);
+  padding:140px 64px;
+  position:relative;overflow:hidden;
+}
+/* Diagonal top cut */
+#about::before{
+  content:'';position:absolute;
+  top:0;left:0;right:0;height:100px;
+  background:var(--parchment);
+  clip-path:polygon(0 0,100% 0,100% 20px,0 100px);
+}
+
+.about-inner{
+  max-width:1200px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:100px;align-items:start;
+  padding-top:80px;
+}
+@media(max-width:800px){.about-inner{grid-template-columns:1fr;gap:60px}}
+
+.about-num{
+  font-family:'Playfair Display',serif;
+  font-size:120px;font-weight:900;
+  color:rgba(255,255,255,.05);
+  line-height:1;letter-spacing:-5px;
+  margin-bottom:-20px;
+  display:block;
+}
+
+.about-eyebrow{
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:rgba(255,255,255,.3);margin-bottom:16px;display:block;
+}
+.about-h2{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(32px,3.5vw,50px);font-weight:900;
+  color:var(--parchment);line-height:1.0;letter-spacing:-1.5px;margin-bottom:20px;
+}
+.about-h2 em{font-style:italic;color:var(--red)}
+.about-body{
+  font-size:15px;font-weight:300;
+  color:rgba(255,255,255,.5);line-height:1.85;margin-bottom:28px;
+}
+.about-link{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:2px;text-transform:uppercase;
+  color:rgba(255,255,255,.5);text-decoration:none;
+  border-bottom:1px solid rgba(255,255,255,.15);padding-bottom:2px;
+  margin-right:24px;
+  transition:color .2s,border-color .2s;
+}
+.about-link:hover{color:var(--parchment);border-color:rgba(255,255,255,.4)}
+
+/* Risk list in about (dark section) */
+.risk-list-items{display:flex;flex-direction:column}
+.risk-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 0;border-bottom:1px solid rgba(255,255,255,.07);
+  font-size:14px;font-weight:300;color:rgba(255,255,255,.55);
+  opacity:0;transform:translateX(16px);
+  transition:opacity .5s var(--ease),transform .5s var(--ease);
+}
+.risk-item.visible{opacity:1;transform:translateX(0)}
+.risk-wt{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,.25)}
+
+/* ── FOOTER ───────────────────────────────────────────── */
+footer{
+  background:var(--ink);color:rgba(255,255,255,.3);
+  padding:36px 64px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-top:1px solid rgba(255,255,255,.06);
+  flex-wrap:wrap;gap:16px;
+}
+.footer-brand{font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:rgba(255,255,255,.3)}
+.footer-brand em{color:var(--red);font-style:normal}
+.footer-copy{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.5px}
+.footer-links{display:flex;gap:24px}
+.footer-links a{
+  font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:1px;color:rgba(255,255,255,.22);
+  text-decoration:none;transition:color .2s;
+}
+.footer-links a:hover{color:rgba(255,255,255,.6)}
+
+/* ── RESPONSIVE ───────────────────────────────────────── */
+@media(max-width:768px){
+  nav,#analyzer,footer{padding-left:24px;padding-right:24px}
+  #about{padding-left:24px;padding-right:24px}
+  .hero-h1{letter-spacing:-2px}
+  .hero-scroll{left:24px}
+}
+</style>
+</head>
+<body>
 
 
-# ── Shared analysis pipeline ───────────────────────────────────────────────────
-# Both /analyze and /upload-pdf funnel through here so the pipeline is identical.
+<!-- NAV -->
+<nav id="nav">
+  <a class="nav-logo" href="#">
+    <svg viewBox="0 0 34 38" fill="none">
+      <path d="M17 1L32 9V22C32 30 17 37 17 37C17 37 2 30 2 22V9L17 1Z" fill="#EDE7DC" stroke="#C41E1E" stroke-width="1.2"/>
+      <path d="M17 5.5L28 12V21C28 27 17 33 17 33C17 33 6 27 6 21V12L17 5.5Z" fill="none" stroke="#C41E1E" stroke-width=".3" stroke-opacity=".4"/>
+      <path d="M20.5 13.5C18.8 12.4 16.2 12.7 14.5 14.4C12.8 16.1 12.8 19 14.5 20.7C16.2 22.4 18.8 22.7 20.5 21.5" stroke="#C41E1E" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="20.5" y1="17.5" x2="17" y2="17.5" stroke="#C41E1E" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="17" cy="28.5" r="1.2" fill="#C41E1E" opacity=".5"/>
+    </svg>
+    <span class="nav-wordmark">Clause<em>Guard</em></span>
+  </a>
+  <div class="nav-right">
+    <div class="nav-status">
+      <div class="nav-dot"></div>
+      Live
+    </div>
+    <a class="nav-link" href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">GitHub</a>
+  </div>
+</nav>
 
-def _run_analysis(text: str):
-    """
-    Core analysis pipeline. Takes clean text, returns a Flask JSON response.
-    Called by both /analyze and /upload-pdf.
-    """
-    t0 = time.time()
-    text = preprocess_text(text)
-    clauses = segment_clauses(text)
+<!-- HERO -->
+<section id="hero">
+  <canvas id="hero-canvas"></canvas>
 
-    CLAUSE_CAP = 300
-    if len(clauses) > CLAUSE_CAP:
-        logger.info(f"Segmented into {len(clauses)} clauses — capping at {CLAUSE_CAP}")
-        clauses = clauses[:CLAUSE_CAP]
-    else:
-        logger.info(f"Segmented into {len(clauses)} clauses")
+  <div class="hero-inner">
+    <div>
+      <div class="hero-eyebrow reveal">
+        <span class="hero-eyebrow-line"></span>
+        SFU Cybersecurity Lab II &nbsp;·&nbsp; 2026
+      </div>
+      <h1 class="hero-h1 reveal reveal-delay-1">
+        The terms<br/>
+        you <em>never</em><br/>
+        <span class="h1-ghost">read.</span>
+      </h1>
+      <p class="hero-sub reveal reveal-delay-2">
+        ClauseGuard analyzes Terms of Service and Privacy Policies in seconds — surfacing the clauses designed to be invisible.
+      </p>
+      <button class="hero-cta reveal reveal-delay-3" onclick="document.getElementById('analyzer').scrollIntoView({behavior:'smooth'})">
+        Analyze a Document
+        <svg viewBox="0 0 14 14" fill="none"><path d="M1 7h12M8 2l6 5-6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
 
-    classified = []
-    if CLASSIFIER_MODE == "hybrid" and classifier:
-        results = classifier.classify_batch(clauses)
-        for i, (clause_text, res) in enumerate(zip(clauses, results)):
-            classified.append({
-                "clause_number":          i + 1,
-                "text":                   clause_text,
-                "category":               res["category"],
-                "primary_category":       res["category"],
-                "primary_category_label": res.get("category_label", res["category"]),
-                "risk_level":             res["risk_level"],
-                "confidence":             res["confidence"],
-                "source":                 res["source"],
-                "matched_keywords":       res.get("matched_keywords", []),
-            })
-    else:
-        for i, clause_text in enumerate(clauses):
-            res  = _rule_classify(clause_text)
-            cat  = res.get("category") or res.get("primary_category") or "none"
-            rl   = res.get("risk_level") or "NONE"
-            kws  = res.get("matched_keywords") or res.get("keywords") or []
-            classified.append({
-                "clause_number":          i + 1,
-                "text":                   clause_text,
-                "category":               cat,
-                "primary_category":       cat,
-                "primary_category_label": CATEGORY_META.get(cat, {}).get("label", ""),
-                "risk_level":             rl,
-                "confidence":             1.0,
-                "source":                 "rule_based",
-                "matched_keywords":       kws,
-            })
+    <div class="hero-card reveal reveal-delay-2">
+      <div class="hc-stat">
+        <div class="hc-n">754</div>
+        <div class="hc-l">Labeled Training<br/>Clauses</div>
+      </div>
+      <div class="hc-stat">
+        <div class="hc-n">0.76</div>
+        <div class="hc-l">Group CV F1<br/>Score</div>
+      </div>
+      <div class="hc-stat">
+        <div class="hc-n">21</div>
+        <div class="hc-l">Real ToS<br/>Documents</div>
+      </div>
+      <div class="hc-stat">
+        <div class="hc-n">7</div>
+        <div class="hc-l">Risk<br/>Categories</div>
+      </div>
+    </div>
+  </div>
 
-    risk_clauses = [c for c in _filter_user_obligations(classified)
-                    if c["risk_level"] != "NONE" and c["category"] != "none"]
+  <div class="hero-scroll">
+    <div class="hero-scroll-line"></div>
+    Scroll
+  </div>
+</section>
 
-    final_score, risk_level, cat_scores = _score_from_clauses(risk_clauses)
-    ms = round((time.time() - t0) * 1000)
+<!-- EVIDENCE STRIP -->
+<div class="evidence-strip">
+  <div class="evidence-inner">
+    <span class="ev-label">Found in real ToS →</span>
+    <span class="ev-pill high">Sell your personal data</span>
+    <span class="ev-pill high">Binding arbitration</span>
+    <span class="ev-pill high">Class action waiver</span>
+    <span class="ev-pill high">Liability capped at $10</span>
+    <span class="ev-pill high">Perpetual content license</span>
+    <span class="ev-pill">Indefinite data retention</span>
+    <span class="ev-pill">Jury trial waiver</span>
+    <span class="ev-pill">Infers income &amp; politics</span>
+    <span class="ev-pill">No deletion guarantee</span>
+  </div>
+</div>
 
-    category_scores = {
-        cat: {
-            "label":          meta["label"],
-            "weight":         meta["weight"],
-            "clause_count":   len(cat_scores[cat]["clauses"]),
-            "score":          cat_scores[cat]["score"],
-            "max_risk_level": _max_risk(cat_scores[cat]["clauses"]),
-        }
-        for cat, meta in CATEGORY_META.items()
+<!-- ANALYZER -->
+<section id="analyzer">
+  <div class="analyzer-grid">
+    <div>
+      <div class="section-tag reveal">Document Analysis</div>
+      <h2 class="input-heading reveal reveal-delay-1">
+        Submit any<br/><em>Terms of Service</em><br/>for analysis.
+      </h2>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('url',this)">URL</button>
+        <button class="tab-btn" onclick="switchTab('pdf',this)">Upload PDF</button>
+      </div>
+
+      <div id="panel-url">
+        <div class="url-row">
+          <input type="url" class="url-in" id="url-in" placeholder="https://discord.com/privacy" onkeydown="if(event.key==='Enter')fetchGo()"/>
+          <button class="url-go" id="url-btn" onclick="fetchGo()">Fetch →</button>
+        </div>
+        <div class="quick-row">
+          <span class="ql-sep">Try →</span>
+          <button class="ql" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify</button>
+          <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
+          <button class="ql" onclick="setUrl('https://www.airbnb.ca/terms')">Airbnb</button>
+          <button class="ql" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn</button>
+          <button class="ql" onclick="setUrl('https://www.doordash.com/terms/')">DoorDash</button>
+          <button class="ql" onclick="setUrl('https://www.amazon.com/gp/help/customer/display.html?nodeId=508088')">Amazon</button>
+        </div>
+        <div class="fetch-msg" id="fetch-msg"></div>
+      </div>
+
+      <!-- PDF Upload panel -->
+      <div id="panel-pdf" style="display:none">
+        <div class="pdf-drop" id="pdf-drop">
+          <input type="file" id="pdf-file" accept="application/pdf" onchange="pdfFileChosen(this)"/>
+          <svg class="pdf-drop-icon" viewBox="0 0 28 28" fill="none">
+            <rect x="3" y="1" width="16" height="22" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M15 1v7h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M7 15h10M7 19h6M7 11h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span class="pdf-drop-label">Drop PDF here or click to browse</span>
+          <span class="pdf-drop-sub">Terms of Service or Privacy Policy · PDF only</span>
+        </div>
+        <div class="pdf-file-chosen" id="pdf-file-chosen"></div>
+      </div>
+
+      <div class="input-bottom">
+        <span class="char-ct" id="char-ct">—</span>
+        <button class="run-btn" id="run-btn" onclick="analyze()">Run Analysis</button>
+      </div>
+
+      <div id="scan-wrap">
+        <div class="scan-ring"></div>
+        <div class="scan-title">Analyzing Document</div>
+        <div class="scan-sub" id="scan-sub"></div>
+      </div>
+
+      <div id="err-block"></div>
+
+      <div id="results">
+        <div class="result-header">
+          <div class="score-panel">
+            <div class="score-eyebrow">Risk Score</div>
+            <div class="ring-wrap">
+              <svg viewBox="0 0 120 120">
+                <circle class="ring-bg" cx="60" cy="60" r="54"/>
+                <circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="54"/>
+              </svg>
+              <div class="ring-num" id="ring-num">0</div>
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:2px;color:var(--ink4);margin-bottom:7px">out of 100</div>
+            <div class="score-badge" id="score-badge">—</div>
+          </div>
+          <div class="result-summary">
+            <div class="result-verdict" id="result-verdict">Assessment complete.</div>
+            <div class="result-body" id="result-body">—</div>
+            <div class="result-meta">
+              <div class="meta-item"><span class="meta-n" id="m-total">—</span><span class="meta-l">Clauses</span></div>
+              <div class="meta-item"><span class="meta-n" id="m-flagged">—</span><span class="meta-l">Risks Found</span></div>
+              <div class="meta-item"><span class="meta-n" id="m-ms">—</span><span class="meta-l">ms</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cat-label-row">Category Breakdown</div>
+        <div class="cat-grid" id="cat-grid"></div>
+
+        <div class="clauses-label" id="clauses-lbl">Flagged Clauses</div>
+        <div class="risk-summary-bar" id="risk-summary-bar" style="display:none">
+          <div class="rsb-item"><div class="rsb-n H" id="rsb-high">0</div><div class="rsb-l">High Risk</div></div>
+          <div class="rsb-item"><div class="rsb-n M" id="rsb-med">0</div><div class="rsb-l">Medium Risk</div></div>
+          <div class="rsb-item"><div class="rsb-n L" id="rsb-low">0</div><div class="rsb-l">Low Risk</div></div>
+        </div>
+        <div class="clause-stack" id="clause-stack"></div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="analyzer-sidebar reveal reveal-delay-2">
+      <div class="sidebar-card">
+        <div class="sidebar-title">Risk Categories</div>
+        <div class="risk-row"><span>Data Sharing</span><span class="risk-weight">22%</span></div>
+        <div class="risk-row"><span>Tracking &amp; Profiling</span><span class="risk-weight">20%</span></div>
+        <div class="risk-row"><span>Third-Party Access</span><span class="risk-weight">13%</span></div>
+        <div class="risk-row"><span>Data Retention</span><span class="risk-weight">13%</span></div>
+        <div class="risk-row"><span>Arbitration</span><span class="risk-weight">13%</span></div>
+        <div class="risk-row"><span>Content &amp; IP Rights</span><span class="risk-weight">10%</span></div>
+        <div class="risk-row"><span>Liability Limitation</span><span class="risk-weight">9%</span></div>
+      </div>
+      <div class="sidebar-card">
+        <div class="sidebar-title">How It Works</div>
+        <div style="font-size:12.5px;font-weight:300;color:var(--ink3);line-height:1.8;">
+          spaCy segments the document into legal clauses. A hybrid TF-IDF + Logistic Regression model classifies each one — falling back to 757 keyword rules when confidence is below 0.60. Weighted score returned in milliseconds.
+        </div>
+        <div id="model-scene"><canvas id="model-canvas"></canvas></div>
+      </div>
+      <div class="sidebar-card" style="border-color:rgba(196,30,30,.2);background:rgba(196,30,30,.03)">
+        <div class="sidebar-title" style="color:rgba(196,30,30,.5)">Model Performance</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--ink3);line-height:2.1">
+          Group CV F1 &nbsp;·&nbsp; <span style="color:var(--ink);font-weight:500">0.7558</span><br/>
+          Training Clauses &nbsp;·&nbsp; <span style="color:var(--ink);font-weight:500">754</span><br/>
+          Threshold &nbsp;·&nbsp; <span style="color:var(--ink);font-weight:500">0.60</span><br/>
+          FPR vs Baseline &nbsp;·&nbsp; <span style="color:var(--forest);font-weight:500">−42%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-inner">
+    <div>
+      <span class="about-num reveal">01</span>
+      <span class="about-eyebrow reveal">About the Project</span>
+      <h2 class="about-h2 reveal reveal-delay-1">
+        Legal language<br/>
+        you're <em>never meant</em><br/>
+        to understand.
+      </h2>
+      <p class="about-body reveal reveal-delay-2">
+        Built as a security research project for SFU Cybersecurity Lab II. ClauseGuard treats legal document analysis as a defensive security problem — surfacing the risk language that platforms count on users never reading.
+      </p>
+      <p class="about-body reveal reveal-delay-2" style="font-size:13.5px">
+        Trained on 312 hand-annotated clauses augmented with 446 from the CLAUDETTE corpus (Drawzeski et al., 2021, University of Bologna). Privacy-specific categories are novel contributions not present in prior academic work.
+      </p>
+      <div class="reveal reveal-delay-3">
+        <a class="about-link" href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">
+          GitHub
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M1 11L11 1M11 1H4M11 1v7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </a>
+        <a class="about-link" href="https://clauseguard-production-183f.up.railway.app/health" target="_blank">
+          API Status
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M1 11L11 1M11 1H4M11 1v7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </a>
+      </div>
+    </div>
+    <div>
+      <div class="risk-list-items" id="risk-list">
+        <div class="risk-item"><span>Data Sharing</span><span class="risk-wt">22%</span></div>
+        <div class="risk-item"><span>Tracking &amp; Profiling</span><span class="risk-wt">20%</span></div>
+        <div class="risk-item"><span>Third-Party Access</span><span class="risk-wt">13%</span></div>
+        <div class="risk-item"><span>Data Retention</span><span class="risk-wt">13%</span></div>
+        <div class="risk-item"><span>Arbitration</span><span class="risk-wt">13%</span></div>
+        <div class="risk-item"><span>Content &amp; IP Rights</span><span class="risk-wt">10%</span></div>
+        <div class="risk-item"><span>Liability Limitation</span><span class="risk-wt">9%</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">Clause<em>Guard</em></div>
+  <div class="footer-copy">SFU 2026 &nbsp;·&nbsp; Tanish Rathore</div>
+  <div class="footer-links">
+    <a href="https://github.com/ogscriptkiddie/clauseguard" target="_blank">GitHub</a>
+    <a href="https://clauseguard-production-183f.up.railway.app/health" target="_blank">API Status</a>
+    <a href="https://ogscriptkiddie.github.io/personal_portfolio/" target="_blank">Portfolio</a>
+  </div>
+</footer>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════
+   NAV SCROLL STATE
+═══════════════════════════════════════════════════════ */
+const nav=document.getElementById('nav');
+window.addEventListener('scroll',()=>{
+  const y=window.scrollY;
+  const inAbout=document.getElementById('about').getBoundingClientRect().top<=68;
+  nav.classList.toggle('scrolled',y>60&&!inAbout);
+  
+  
+});
+
+/* ═══════════════════════════════════════════════════════
+   THREE.JS — HERO DOT GRID (ink wave on cream)
+   Animated dot matrix with wave distortion + red flagged nodes
+═══════════════════════════════════════════════════════ */
+(function(){
+  const canvas=document.getElementById('hero-canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setClearColor(0x000000,0);
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(52,1,0.1,100);
+  camera.position.z=22;
+
+  function resize(){
+    const w=canvas.parentElement.clientWidth,h=canvas.parentElement.clientHeight||window.innerHeight;
+    renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
+  }
+  resize();window.addEventListener('resize',resize);
+
+  /* Dot grid */
+  const COLS=52,ROWS=32,TOTAL=COLS*ROWS;
+  const spacing=0.78;
+  const posArr=new Float32Array(TOTAL*3);
+  const colArr=new Float32Array(TOTAL*3);
+  const baseX=new Float32Array(TOTAL),baseY=new Float32Array(TOTAL);
+  // ~4% red flagged nodes, rest ink
+  const flagged=new Uint8Array(TOTAL);
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const i=r*COLS+c;
+      const x=(c-COLS/2)*spacing;
+      const y=(r-ROWS/2)*spacing;
+      baseX[i]=x;baseY[i]=y;
+      posArr[i*3]=x;posArr[i*3+1]=y;posArr[i*3+2]=0;
+      flagged[i]=Math.random()<.04?1:0;
+      if(flagged[i]){
+        colArr[i*3]=0.77;colArr[i*3+1]=0.12;colArr[i*3+2]=0.12; // red
+      } else {
+        colArr[i*3]=0.10;colArr[i*3+1]=0.09;colArr[i*3+2]=0.08; // ink
+      }
+    }
+  }
+
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(posArr,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(colArr,3));
+
+  const mat=new THREE.PointsMaterial({
+    size:0.07,vertexColors:true,
+    transparent:true,opacity:0.45,
+    sizeAttenuation:true
+  });
+  scene.add(new THREE.Points(geo,mat));
+
+  /* Subtle fog matching parchment */
+  scene.fog=new THREE.FogExp2(0xF4F0E8,0.016);
+
+  let t=0,mx=0,my=0;
+  document.addEventListener('mousemove',e=>{
+    mx=(e.clientX/window.innerWidth-.5)*2;
+    my=(e.clientY/window.innerHeight-.5)*2;
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    t+=0.007;
+    const pos=geo.attributes.position;
+
+    for(let i=0;i<TOTAL;i++){
+      const x=baseX[i],y=baseY[i];
+      // Slow rolling wave
+      const wave=Math.sin(x*0.35+t)*Math.cos(y*0.28+t*0.6)*0.55;
+      // Mouse proximity ripple
+      const dx=x-mx*14,dy=y-my*9;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const ripple=Math.sin(dist*0.7-t*4)*0.18*Math.exp(-dist*0.1);
+      pos.setZ(i,wave+ripple);
+      // Flagged nodes pulse slightly in opacity-like scale via Z
+      if(flagged[i]) pos.setZ(i,pos.getZ(i)+Math.sin(t*3+i)*0.12);
+    }
+    pos.needsUpdate=true;
+
+    camera.position.x=mx*0.6;
+    camera.position.y=-my*0.4;
+    camera.lookAt(0,0,0);
+    renderer.render(scene,camera);
+  }
+  animate();
+})();
+
+/* ═══════════════════════════════════════════════════════
+   THREE.JS — RISK CONSTELLATION
+   7 spheres, one per risk category. Neutral until analysis
+   fires — then each sphere blooms to its risk color + scale.
+   Connected by a thin risk web. Camera slow-orbits.
+═══════════════════════════════════════════════════════ */
+(function(){
+  const canvas = document.getElementById('model-canvas');
+  if(!canvas) return;
+
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setClearColor(0x000000,0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(44,1,0.1,100);
+  camera.position.set(0,0,9);
+
+  /* Category definitions */
+  const CATS = [
+    {key:'data_sharing'},
+    {key:'tracking_profiling'},
+    {key:'third_party_access'},
+    {key:'data_retention'},
+    {key:'arbitration'},
+    {key:'content_rights'},
+    {key:'liability_limitation'},
+  ];
+
+  const C_NEUTRAL = new THREE.Color(0xC8C0B4);
+  const C_RISK = {
+    HIGH:   new THREE.Color(0xC41E1E),
+    MEDIUM: new THREE.Color(0xB45309),
+    LOW:    new THREE.Color(0x166534),
+    NONE:   new THREE.Color(0xC8C0B4),
+  };
+
+  /* 3D positions — rough sphere surface scatter */
+  const POS = [
+    [ 0.0,  2.0,  0.3],
+    [ 1.7,  0.9, -0.5],
+    [ 1.9, -0.5,  0.4],
+    [ 0.4, -1.9,  0.1],
+    [-0.6, -1.9, -0.3],
+    [-1.9, -0.5,  0.4],
+    [-1.7,  0.9, -0.5],
+  ];
+
+  /* Build spheres */
+  const spheres = [];
+  CATS.forEach((cat,i)=>{
+    const [x,y,z] = POS[i];
+
+    const geo = new THREE.SphereGeometry(0.30,28,28);
+    const mat = new THREE.MeshPhongMaterial({
+      color: C_NEUTRAL.clone(),
+      emissive: new THREE.Color(0x000000),
+      emissiveIntensity: 0,
+      shininess: 70,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const mesh = new THREE.Mesh(geo,mat);
+    mesh.position.set(x,y,z);
+    scene.add(mesh);
+
+    /* Spinning halo ring */
+    const rGeo = new THREE.TorusGeometry(0.42,0.014,8,52);
+    const rMat = new THREE.MeshBasicMaterial({color:C_NEUTRAL.clone(),transparent:true,opacity:0.20});
+    const ring = new THREE.Mesh(rGeo,rMat);
+    ring.position.set(x,y,z);
+    ring.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,0);
+    scene.add(ring);
+
+    spheres.push({
+      mesh,mat,ring,rMat,
+      x,y,z,
+      phase: i*(Math.PI*2/7),
+      key: cat.key,
+      targetColor: C_NEUTRAL.clone(),
+      targetScale: 1.0,
+      currentScale: 1.0,
+    });
+  });
+
+  /* Web of connecting lines */
+  const lineMats = [];
+  for(let i=0;i<7;i++){
+    for(let j=i+1;j<7;j++){
+      const pts=[new THREE.Vector3(...POS[i]),new THREE.Vector3(...POS[j])];
+      const lMat=new THREE.LineBasicMaterial({color:0xC8C0B4,transparent:true,opacity:0.13});
+      scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),lMat));
+      lineMats.push(lMat);
+    }
+  }
+
+  /* Central core — tiny icosahedron */
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.22,1),
+    new THREE.MeshPhongMaterial({color:0xD6CEBF,transparent:true,opacity:0.55,wireframe:false})
+  );
+  scene.add(core);
+
+  /* Lighting */
+  scene.add(new THREE.AmbientLight(0xF4EDE0,2.8));
+  const keyLight = new THREE.DirectionalLight(0xFFFFFF,1.5);
+  keyLight.position.set(5,7,5);
+  scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0xC41E1E,0,16);
+  fillLight.position.set(-4,2,3);
+  scene.add(fillLight);
+
+  /* Resize */
+  function resize(){
+    const w=canvas.offsetWidth||canvas.parentElement.clientWidth||300;
+    const h=canvas.offsetHeight||canvas.parentElement.clientHeight||240;
+    renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  }
+  const roObs=new ResizeObserver(()=>resize());
+  roObs.observe(canvas.parentElement);
+  setTimeout(resize,100);
+  window.addEventListener('resize',resize);
+
+  /* Public API */
+  window.updateRiskViz = function(categoryScores){
+    if(!categoryScores) return;
+    const order=['HIGH','MEDIUM','LOW','NONE'];
+    let maxRisk='NONE';
+    spheres.forEach(s=>{
+      const cat=categoryScores[s.key];
+      if(!cat) return;
+      const rl=cat.max_risk_level||'NONE';
+      const scr=cat.score||0;
+      s.targetColor=(C_RISK[rl]||C_RISK.NONE).clone();
+      s.targetScale=0.85+(scr/100)*1.1;
+      if(order.indexOf(rl)<order.indexOf(maxRisk)) maxRisk=rl;
+    });
+    fillLight.color.copy(C_RISK[maxRisk]||C_RISK.NONE);
+    fillLight.intensity = maxRisk==='HIGH'?1.4 : maxRisk==='MEDIUM'?0.7 : 0;
+    lineMats.forEach(m=>{ m.opacity = maxRisk==='NONE'?0.13:0.30; });
+  };
+  window.setModelRisk=function(){};
+
+  /* Animation */
+  let t=0;
+  function animate(){
+    requestAnimationFrame(animate);
+    t+=0.005;
+
+    spheres.forEach((s,i)=>{
+      /* Float gently */
+      s.mesh.position.y = s.y + Math.sin(t*0.85+s.phase)*0.10;
+      s.ring.position.y = s.mesh.position.y;
+
+      /* Color lerp */
+      s.mat.color.lerp(s.targetColor,0.035);
+      s.rMat.color.lerp(s.targetColor,0.035);
+
+      /* Emissive glow */
+      const isHigh  = s.targetColor.r > 0.6 && s.targetColor.g < 0.3;
+      const isMid   = s.targetColor.r > 0.5 && s.targetColor.g > 0.3;
+      const tEmit   = isHigh ? 0.38 : isMid ? 0.20 : 0;
+      s.mat.emissive.lerp(s.targetColor,0.04);
+      s.mat.emissiveIntensity += (tEmit - s.mat.emissiveIntensity)*0.04;
+
+      /* Scale */
+      s.currentScale += (s.targetScale - s.currentScale)*0.05;
+      s.mesh.scale.setScalar(s.currentScale);
+
+      /* Ring rotation */
+      s.ring.rotation.x += 0.005 + i*0.0004;
+      s.ring.rotation.z += 0.003 + i*0.0003;
+    });
+
+    /* Core pulse */
+    core.rotation.y = t*0.4;
+    core.rotation.x = t*0.25;
+
+    /* Slow camera orbit */
+    camera.position.x = Math.sin(t*0.20)*1.4;
+    camera.position.y = Math.cos(t*0.14)*0.7;
+    camera.lookAt(0,0,0);
+
+    renderer.render(scene,camera);
+  }
+  animate();
+})();
+
+/* ═══════════════════════════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════════════════════════ */
+new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12})
+  .observe.call(new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12}),document.body);
+
+const ro=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
+
+// Risk list stagger
+const rlo=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){e.target.querySelectorAll('.risk-item').forEach((r,i)=>setTimeout(()=>r.classList.add('visible'),i*80))}})},{threshold:.2});
+const rl=document.getElementById('risk-list');if(rl)rlo.observe(rl);
+
+/* ═══════════════════════════════════════════════════════
+   ANALYZER LOGIC
+═══════════════════════════════════════════════════════ */
+const API='https://clauseguard-production-183f.up.railway.app';
+let activeTab='url',fetchedText='';
+
+const SAMPLES={
+  arb:`DISPUTES AND ARBITRATION\n\nAny dispute or claim relating in any way to your use of our Services will be resolved by binding arbitration rather than in court. There is no judge or jury in arbitration. We each agree that any dispute resolution proceedings will be conducted only on an individual basis and not in a class, consolidated or representative action. If for any reason a claim proceeds in court rather than in arbitration, we each waive any right to a jury trial. Any claim arising under these terms must be commenced within one year after the date the party asserting the claim first knows or reasonably should know of the act.`,
+  data:`SHARING YOUR INFORMATION\n\nWe may share your personal information with third-party business partners, advertisers, data brokers, and marketing networks for their own direct marketing purposes. We may sell or otherwise transfer personal information about you to other companies or organizations. We may disclose information in response to a request for information if we believe disclosure is required by law, including meeting national security or law enforcement requirements.`,
+  ip:`USER CONTENT LICENSE\n\nBy submitting, posting, or displaying content on our services, you grant us a worldwide, non-exclusive, royalty-free, transferable, sub-licensable, irrevocable, perpetual license to use, reproduce, modify, adapt, publish, translate, create derivative works from, distribute, perform, and display such content in any media. Where applicable you also agree to waive, and not to enforce, any moral rights. If you provide feedback, such feedback is not confidential and may be used by us without restriction and without payment to you.`,
+  liab:`DISCLAIMER AND LIABILITY CAP\n\nTHE SERVICES ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES. OUR TOTAL LIABILITY SHALL NOT EXCEED USD $10.00. YOU AGREE THAT YOU SHALL NOT SUE OR RECOVER ANY DAMAGES FROM US AS A RESULT OF OUR DECISION TO REMOVE OR RESTRICT ACCESS TO YOUR CONTENT.`,
+  full:`TERMS OF SERVICE\n\n1. USER CONTENT\nYou grant us a worldwide, irrevocable, royalty-free, perpetual license to use, copy, modify, and distribute any content you provide, for any purpose including commercial purposes.\n\n2. DATA SHARING\nWe may share your personal information with advertising partners, data brokers, and analytics providers. We may disclose your information to law enforcement without prior notice.\n\n3. TRACKING\nWe use cookies to track your activity across our services and other websites. We infer your age range, gender, income bracket, and political preferences from collected data.\n\n4. DATA RETENTION\nWe retain your personal information for as long as necessary. Even after account deletion, we may retain certain information for up to seven years.\n\n5. ARBITRATION\nALL DISPUTES SHALL BE RESOLVED BY BINDING ARBITRATION. YOU WAIVE YOUR RIGHT TO PARTICIPATE IN A CLASS ACTION. ANY CLAIMS MUST BE BROUGHT WITHIN ONE YEAR OR PERMANENTLY BARRED.\n\n6. LIABILITY\nOUR TOTAL LIABILITY SHALL NOT EXCEED $10.00. SERVICES PROVIDED "AS IS" WITHOUT ANY WARRANTY.`
+};
+
+function switchTab(name,btn){
+  activeTab=name;fetchedText='';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-url').style.display=name==='url'?'block':'none';
+  document.getElementById('panel-pdf').style.display=name==='pdf'?'block':'none';
+  upd();
+}
+function setUrl(u){document.getElementById('url-in').value=u;setFetchMsg('','');fetchedText='';upd()}
+function setFetchMsg(t,c){const e=document.getElementById('fetch-msg');e.textContent=t;e.className='fetch-msg'+(c?' '+c:'')}
+function upd(){
+  const e=document.getElementById('char-ct');
+  if(activeTab==='pdf'){
+    const f=document.getElementById('pdf-file').files[0];
+    e.textContent=f?f.name+' · '+Math.round(f.size/1024)+' KB':'—';
+  } else if(fetchedText)e.textContent=fetchedText.length.toLocaleString()+' chars fetched';
+  else e.textContent='—';
+}
+document.getElementById('url-in').addEventListener('input',()=>{fetchedText='';setFetchMsg('','');upd()});
+
+// PDF drag-and-drop
+const pdfDrop=document.getElementById('pdf-drop');
+pdfDrop.addEventListener('dragover',e=>{e.preventDefault();pdfDrop.classList.add('drag-over')});
+pdfDrop.addEventListener('dragleave',()=>pdfDrop.classList.remove('drag-over'));
+pdfDrop.addEventListener('drop',e=>{
+  e.preventDefault();pdfDrop.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type==='application/pdf'){
+    const dt=new DataTransfer();dt.items.add(f);
+    document.getElementById('pdf-file').files=dt.files;
+    pdfFileChosen(document.getElementById('pdf-file'));
+  }
+});
+function pdfFileChosen(input){
+  const f=input.files[0];
+  const lbl=document.getElementById('pdf-file-chosen');
+  if(f){lbl.textContent='✓  '+f.name;lbl.classList.add('on');}
+  else{lbl.textContent='';lbl.classList.remove('on');}
+  upd();
+}
+
+async function fetchGo(){
+  const url=document.getElementById('url-in').value.trim();
+  if(!url){setFetchMsg('Enter a URL.','err');return}
+  const btn=document.getElementById('url-btn');
+  btn.disabled=true;fetchedText='';
+  setFetchMsg('↗ Fetching via server…','wait');upd();
+  try{
+    const res=await fetch(`${API}/fetch-url`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.error||`Error ${res.status}`);
+    fetchedText=d.text;
+    setFetchMsg(`↗ ${d.char_count.toLocaleString()} chars fetched — running analysis…`,'ok');
+    upd();await runAnalysis(fetchedText);
+  }catch(e){setFetchMsg('✗ '+e.message,'err');}
+  finally{btn.disabled=false}
+}
+
+function analyze(){
+  if(activeTab==='pdf'){
+    const f=document.getElementById('pdf-file').files[0];
+    if(!f){showErr('Select a PDF file first.');return}
+    uploadPdf(f);return;
+  }
+  const text=fetchedText;
+  if(!text||text.length<50){showErr('Fetch a URL first, or switch to Upload PDF.');return}
+  runAnalysis(text);
+}
+
+async function uploadPdf(file){
+  soff('results');soff('err-block');son('scan-wrap');
+  document.getElementById('run-btn').disabled=true;
+  let i=0;const sub=document.getElementById('scan-sub');
+  const t=setInterval(()=>{sub.textContent=LOGS[i++%LOGS.length]},700);
+  try{
+    const fd=new FormData();fd.append('file',file);
+    const res=await fetch(`${API}/upload-pdf`,{method:'POST',body:fd});
+    clearInterval(t);
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`HTTP ${res.status}`)}
+    render(await res.json());
+  }catch(e){clearInterval(t);showErr('PDF analysis error: '+e.message)}
+  finally{soff('scan-wrap');document.getElementById('run-btn').disabled=false}
+}
+
+const LOGS=['Segmenting legal clauses…','Running rule classifier…','Detecting negation patterns…','Computing category weights…','Building risk profile…','Finalizing…'];
+
+function son(id){document.getElementById(id).classList.add('on')}
+function soff(id){document.getElementById(id).classList.remove('on')}
+
+async function runAnalysis(text){
+  soff('results');soff('err-block');son('scan-wrap');
+  document.getElementById('run-btn').disabled=true;
+  let i=0;const sub=document.getElementById('scan-sub');
+  const t=setInterval(()=>{sub.textContent=LOGS[i++%LOGS.length]},700);
+  try{
+    const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    clearInterval(t);
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`HTTP ${res.status}`)}
+    render(await res.json());
+  }catch(e){clearInterval(t);showErr('Analysis error: '+e.message)}
+  finally{soff('scan-wrap');document.getElementById('run-btn').disabled=false}
+}
+
+function showErr(msg){
+  const e=document.getElementById('err-block');
+  e.textContent='✗  '+msg;son('err-block');soff('scan-wrap');
+  document.getElementById('run-btn').disabled=false;
+}
+
+function lv(s){return s==='HIGH'?'H':s==='MEDIUM'?'M':s==='LOW'?'L':'N'}
+
+
+/* ═══════════════════════════════════════════════════════
+   CONSUMER EXPLANATIONS — plain English for each
+   category × risk level combination
+═══════════════════════════════════════════════════════ */
+const MEANINGS = {
+  data_sharing: {
+    H: "This company can <strong>sell or share your personal information</strong> with advertisers, data brokers, or other companies for commercial purposes. You have little to no control over where your data ends up.",
+    M: "This company shares some of your information with selected partners. It may be used for advertising or analytics, but is not necessarily sold outright.",
+    L: "Your data may be shared with service providers who help run the platform, but this is generally limited and for operational purposes only."
+  },
+  tracking_profiling: {
+    H: "This company <strong>tracks your behavior across websites and apps</strong>, builds a detailed profile of your interests, age, income, and political views, and uses or sells that profile for targeted advertising.",
+    M: "This company uses cookies and analytics to understand how you use their service. Some personalization and ad targeting may occur.",
+    L: "Basic usage analytics are collected to improve the service. Limited behavioral tracking is involved."
+  },
+  third_party_access: {
+    H: "Outside parties — including <strong>employers, law enforcement, or advertisers</strong> — can access your account data, communications, or files. In some cases this happens without notifying you.",
+    M: "Third-party services integrated into the platform may access limited portions of your data. Government or legal requests may also require disclosure.",
+    L: "Third parties have restricted access, typically limited to what is necessary to provide integrated features you've opted into."
+  },
+  data_retention: {
+    H: "This company <strong>keeps your data indefinitely</strong>, even after you delete your account. Backup copies may persist for years and can be used for internal purposes or legal investigations.",
+    M: "Your data is retained for a defined but potentially extended period after you leave. Some information may persist in backups or anonymized form.",
+    L: "Data is kept for a limited, reasonable period for legal or operational compliance before being deleted."
+  },
+  arbitration: {
+    H: "You are <strong>giving up your right to sue this company in court</strong> or join a class action lawsuit. All disputes must go through private arbitration, where the arbitrator's decision is final and cannot be appealed.",
+    M: "Disputes are directed toward arbitration or a specific jurisdiction's courts. Your legal options are limited but not entirely removed.",
+    L: "There are some procedural limitations on how you can bring claims, but your fundamental right to legal recourse is largely preserved."
+  },
+  content_rights: {
+    H: "By posting anything on this platform, you grant the company a <strong>permanent, worldwide, royalty-free license</strong> to use, copy, modify, and sublicense your content — forever, even after you delete it. You may also be waiving moral rights (the right to be credited as the author).",
+    M: "The platform takes a broad license over your content to operate and promote the service. The license may extend beyond what you would expect for basic functionality.",
+    L: "The platform takes a license over your content for the limited purpose of displaying and operating the service. This is standard for most platforms."
+  },
+  liability_limitation: {
+    H: "This company <strong>limits or eliminates its liability</strong> if something goes wrong — including data breaches or service failures. Your ability to recover damages may be severely restricted or capped.",
+    M: "The company limits its liability for indirect or consequential damages. You can still seek some compensation but recovery may be restricted.",
+    L: "Standard warranty disclaimers are present. The company limits liability for things outside its reasonable control, which is common practice."
+  }
+};
+
+function getConsumerMeaning(category, riskLevel, clauseText) {
+  const catKey = (category || '').toLowerCase().replace(/[^a-z_]/g,'');
+  const rl = (riskLevel || 'L').charAt(0).toUpperCase();
+  const cat = MEANINGS[catKey];
+  if (!cat) return null;
+  let meaning = cat[rl] || cat['M'] || null;
+  if (meaning && catKey === 'liability_limitation' && rl === 'H' && clauseText) {
+    const dollarMatch = clauseText.match(/\$\s*[\d,]+(?:\.\d{1,2})?/);
+    if (dollarMatch) {
+      const amount = dollarMatch[0].replace(/\s/, '');
+      meaning = meaning.replace('or capped.', `or capped at as little as <strong>${amount}</strong>.`);
+    }
+  }
+  return meaning;
+}
+
+function render(data){
+  son('results');
+  // Trigger resize so Three.js model canvas redraws at correct size
+  window.dispatchEvent(new Event('resize'));
+  // Scroll to score card (.result-header) with nav offset
+  setTimeout(()=>{
+    const el=document.querySelector('.result-header');
+    if(el){
+      const top=el.getBoundingClientRect().top+window.scrollY-88;
+      window.scrollTo({top,behavior:'smooth'});
+    }
+  },60);
+
+  const level=data.risk_level||'LOW';
+  const lvc=lv(level);
+  const score=data.risk_score||0;
+
+  if(window.updateRiskViz)window.updateRiskViz(data.category_scores);
+
+  // Ring
+  const circ=339;
+  const fg=document.getElementById('ring-fg');
+  const rCols={H:'#C41E1E',M:'#B45309',L:'#166534',N:'#9CA3AF'};
+  fg.style.stroke=rCols[lvc]||'#334466';
+
+  let cur2=0,step=Math.max(1,Math.floor(score/50));
+  const numEl=document.getElementById('ring-num');
+  const ct=setInterval(()=>{
+    cur2=Math.min(cur2+step,score);
+    numEl.textContent=cur2;
+    fg.style.strokeDashoffset=circ-(cur2/100)*circ;
+    if(cur2>=score)clearInterval(ct);
+  },18);
+
+  const badge=document.getElementById('score-badge');
+  badge.className='score-badge '+lvc;
+  badge.textContent=level+' RISK';
+
+  const vrd={H:'High-risk document.',M:'Moderate risk detected.',L:'Low risk detected.',N:'All clear.'};
+  document.getElementById('result-verdict').textContent=vrd[lvc]||'Complete.';
+  document.getElementById('result-body').textContent=data.summary||'';
+  document.getElementById('m-total').textContent=data.total_clauses_analyzed||0;
+  document.getElementById('m-flagged').textContent=data.total_risk_clauses_detected||0;
+  document.getElementById('m-ms').textContent=data.processing_time_ms||0;
+
+  // Categories — sorted by risk level HIGH → MEDIUM → LOW → NONE
+  const grid=document.getElementById('cat-grid');
+  grid.innerHTML='';
+  const RISK_ORDER_MAP={'HIGH':0,'MEDIUM':1,'LOW':2,'NONE':3};
+  const sortedCats = Object.entries(data.category_scores||{}).sort(([,a],[,b])=>{
+    return (RISK_ORDER_MAP[a.max_risk_level]??3)-(RISK_ORDER_MAP[b.max_risk_level]??3);
+  });
+  sortedCats.forEach(([k,cat],i)=>{
+    const rv=lv(cat.max_risk_level||'NONE');
+    const tile=document.createElement('div');
+    tile.className='cat-tile';tile.style.animationDelay=(i*55)+'ms';
+    tile.innerHTML=`<span class="ct-n">${cat.clause_count||0}</span><div class="ct-name">${cat.label||k}</div><div class="ct-track"><div class="ct-bar ${rv}" id="cb-${k}"></div></div><div class="ct-risk ${rv}">${cat.max_risk_level==='NONE'?'Clear':cat.max_risk_level}</div>`;
+    grid.appendChild(tile);
+    setTimeout(()=>{const b=document.getElementById('cb-'+k);if(b)b.style.width=(cat.score||0)+'%'},100+i*55);
+  });
+
+  // ── Clauses — grouped by risk level ─────────────────────────────────
+  const stack=document.getElementById('clause-stack');
+  stack.innerHTML='';
+
+  const allClauses=(data.clauses||[]).filter(c=>c.risk_level!=='NONE'&&c.category!=='none');
+  const HIGH_CLAUSES = allClauses.filter(c=>c.risk_level==='HIGH');
+  const MED_CLAUSES  = allClauses.filter(c=>c.risk_level==='MEDIUM');
+  const LOW_CLAUSES  = allClauses.filter(c=>c.risk_level==='LOW');
+
+  const total = allClauses.length;
+  document.getElementById('clauses-lbl').textContent = total ? `Flagged Clauses — ${total}` : 'Flagged Clauses';
+
+  // Summary bar
+  const bar = document.getElementById('risk-summary-bar');
+  if(total){
+    bar.style.display='flex';
+    document.getElementById('rsb-high').textContent = HIGH_CLAUSES.length;
+    document.getElementById('rsb-med').textContent  = MED_CLAUSES.length;
+    document.getElementById('rsb-low').textContent  = LOW_CLAUSES.length;
+  } else {
+    bar.style.display='none';
+  }
+
+  if(!total){
+    stack.innerHTML='<div style="padding:32px 0;font-family:DM Mono,monospace;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:1px;">✓  No risk clauses detected.</div>';
+    return;
+  }
+
+  function makeCard(c, i, delay){
+    const rv=lv(c.risk_level);
+    const card=document.createElement('div');
+    card.className=`clause-card ${rv}`;
+    card.style.animationDelay=delay+'ms';
+    const kws=(c.matched_keywords||[]).slice(0,5).map(k=>`<span class="kw-pill">${esc(k)}</span>`).join('');
+    const meaning=getConsumerMeaning(c.primary_category,c.risk_level,c.text);
+    card.innerHTML=`
+      <div class="cc-top" onclick="toggleRaw(this)">
+        <div class="cc-left">
+          <div class="cc-tags">
+            <span class="badge ${rv}">${c.risk_level}</span>
+            <span class="badge-cat">${c.primary_category_label||c.primary_category}</span>
+            ${c.clause_number?`<span class="badge-num">§${c.clause_number}</span>`:''}
+          </div>
+          <div class="cc-text">${esc(trunc(c.text,220))}</div>
+        </div>
+        <button class="cc-toggle">View</button>
+      </div>
+      ${meaning?`
+      <div class="cc-meaning">
+        <div class="cc-meaning-label">What this means for you</div>
+        <div class="cc-meaning-text">${meaning}</div>
+      </div>`:''}
+      ${kws?`<div class="cc-kws">${kws}</div>`:''}
+      <div class="cc-raw">${esc(c.text)}</div>
+    `;
+    return card;
+  }
+
+  function makeGroup(clauses, level, label, startDelay){
+    if(!clauses.length) return null;
+    const rv = lv(level);
+    const group = document.createElement('div');
+    group.className = 'risk-group';
+
+    // Group header
+    group.innerHTML = `
+      <div class="risk-group-header">
+        <div class="risk-group-icon ${rv}"></div>
+        <div class="risk-group-title ${rv}">${label}</div>
+        <div class="risk-group-count">${clauses.length} clause${clauses.length!==1?'s':''}</div>
+      </div>
+    `;
+
+    const LOW_COLLAPSE_THRESHOLD = 10;
+    const LOW_ALWAYS_SHOW = 3;
+
+    if(level==='LOW' && clauses.length > LOW_COLLAPSE_THRESHOLD){
+      // Show first 3, collapse the rest
+      const visibleStack = document.createElement('div');
+      visibleStack.className = 'clause-stack';
+      clauses.slice(0, LOW_ALWAYS_SHOW).forEach((c,i)=>{
+        visibleStack.appendChild(makeCard(c,i,startDelay+i*40));
+      });
+      group.appendChild(visibleStack);
+
+      const overflowStack = document.createElement('div');
+      overflowStack.className = 'clause-stack low-overflow';
+      overflowStack.id = 'low-overflow';
+      clauses.slice(LOW_ALWAYS_SHOW).forEach((c,i)=>{
+        overflowStack.appendChild(makeCard(c,i+LOW_ALWAYS_SHOW,startDelay+(i+LOW_ALWAYS_SHOW)*40));
+      });
+      group.appendChild(overflowStack);
+
+      const showBtn = document.createElement('button');
+      showBtn.className = 'show-more-btn';
+      const remaining = clauses.length - LOW_ALWAYS_SHOW;
+      showBtn.textContent = `Show ${remaining} more low-risk clause${remaining!==1?'s':''}`;
+      showBtn.onclick = function(){
+        const ov = document.getElementById('low-overflow');
+        const isOpen = ov.classList.toggle('open');
+        this.textContent = isOpen
+          ? `Hide ${remaining} low-risk clause${remaining!==1?'s':''}`
+          : `Show ${remaining} more low-risk clause${remaining!==1?'s':''}`;
+      };
+      group.appendChild(showBtn);
+    } else {
+      const clauseStack = document.createElement('div');
+      clauseStack.className = 'clause-stack';
+      clauses.forEach((c,i)=>clauseStack.appendChild(makeCard(c,i,startDelay+i*40)));
+      group.appendChild(clauseStack);
     }
 
-    return jsonify({
-        "risk_score":                  final_score,
-        "risk_level":                  risk_level,
-        "summary":                     _summary(final_score, risk_level, len(risk_clauses), len(clauses)),
-        "total_clauses_analyzed":      len(clauses),
-        "total_risk_clauses_detected": len(risk_clauses),
-        "processing_time_ms":          ms,
-        "classifier_mode":             CLASSIFIER_MODE,
-        "category_scores":             category_scores,
-        "clauses":                     classified,
-    })
+    return group;
+  }
 
+  let delay = 0;
+  [
+    { clauses: HIGH_CLAUSES, level: 'HIGH', label: 'High Risk' },
+    { clauses: MED_CLAUSES,  level: 'MEDIUM', label: 'Medium Risk' },
+    { clauses: LOW_CLAUSES,  level: 'LOW', label: 'Low Risk' },
+  ].forEach(({clauses, level, label})=>{
+    const group = makeGroup(clauses, level, label, delay);
+    if(group){ stack.appendChild(group); delay += clauses.length * 40 + 60; }
+  });
+}
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({
-        "status": "ok",
-        "classifier_mode": CLASSIFIER_MODE,
-        "rule_method": _rule_method,
-        "version": "3.2.0",
-    })
-
-
-@app.route("/analyze", methods=["POST"])
-@limiter.limit("30 per minute")
-def analyze():
-    data = request.get_json(silent=True) or {}
-    text = (data.get("text") or "").strip()
-    if not text:
-        return jsonify({"error": "No text provided"}), 400
-    if len(text) < 50:
-        return jsonify({"error": "Text too short (minimum 50 characters)"}), 400
-    if len(text) > 1_500_000:
-        return jsonify({"error": "Text too large (maximum 1.5 MB)"}), 413
-
-    return _run_analysis(text)
-
-
-@app.route("/upload-pdf", methods=["POST"])
-@limiter.limit("20 per minute")
-def upload_pdf():
-    # Validate file presence
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded. Send the PDF as form-data with field name 'file'."}), 400
-
-    file = request.files["file"]
-
-    if not file or not file.filename:
-        return jsonify({"error": "No file selected."}), 400
-
-    if not file.filename.lower().endswith(".pdf"):
-        return jsonify({"error": "File must be a PDF (.pdf extension required)."}), 400
-
-    try:
-        from pypdf import PdfReader
-        import io
-
-        raw_bytes = file.read()
-
-        if len(raw_bytes) == 0:
-            return jsonify({"error": "Uploaded file is empty."}), 400
-
-        if len(raw_bytes) > 10 * 1024 * 1024:
-            return jsonify({"error": "PDF too large (maximum 10 MB)."}), 413
-
-        reader = PdfReader(io.BytesIO(raw_bytes))
-
-        # Check if PDF is encrypted
-        if reader.is_encrypted:
-            return jsonify({"error": "PDF is password-protected. Please remove the password and try again."}), 422
-
-        text_parts = []
-        for page in reader.pages:
-            try:
-                extracted = page.extract_text()
-                if extracted:
-                    text_parts.append(extracted)
-            except Exception:
-                continue  # skip unreadable pages, don't crash
-
-        text = "\n\n".join(text_parts).strip()
-
-        if len(text) < 50:
-            return jsonify({
-                "error": (
-                    "Could not extract readable text from this PDF. "
-                    "It may be scanned or image-based. "
-                    "Try opening it in your browser, copying all the text, "
-                    "then using the URL tab instead."
-                )
-            }), 422
-
-        logger.info(f"PDF upload: {file.filename} — {len(raw_bytes):,} bytes — {len(text):,} chars extracted")
-        return _run_analysis(text)
-
-    except Exception as e:
-        logger.error(f"PDF processing error ({file.filename}): {e}")
-        return jsonify({"error": f"PDF processing failed: {str(e)}"}), 500
-
-
-@app.route("/fetch-url", methods=["POST"])
-@limiter.limit("20 per minute")
-def fetch_url():
-    data = request.get_json(silent=True) or {}
-    url  = (data.get("url") or "").strip()
-    if not url:
-        return jsonify({"error": "No URL provided"}), 400
-
-    valid, reason = _validate_fetch_url(url)
-    if not valid:
-        logger.warning(f"Blocked fetch-url request: {reason} — url={url!r}")
-        return jsonify({"error": reason}), 422
-
-    headers = {
-        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                       "AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/120.0.0.0 Safari/537.36"),
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-    try:
-        resp = http_requests.get(url, headers=headers, timeout=15, allow_redirects=True)
-        resp.raise_for_status()
-    except http_requests.exceptions.Timeout:
-        return jsonify({"error": "Request timed out after 15 seconds"}), 504
-    except http_requests.exceptions.ConnectionError:
-        return jsonify({"error": f"Could not connect to {url}"}), 502
-    except http_requests.exceptions.HTTPError as e:
-        code = e.response.status_code
-        if code == 403:
-            return jsonify({"error": (
-                "This site blocks automated access (403). "
-                "Open the page in your browser, copy all the text, "
-                "then use the Paste Text tab instead."
-            )}), 422
-        if code == 404:
-            return jsonify({"error": f"Page not found (404): {url}"}), 422
-        return jsonify({"error": f"HTTP {code} error fetching {url}"}), 502
-    except Exception as e:
-        logger.error(f"Unexpected error fetching URL: {e}")
-        return jsonify({"error": "Unexpected error fetching the URL"}), 500
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    for tag in soup(["script","style","nav","header","footer",
-                     "iframe","noscript","aside","form","button",
-                     "img","svg","figure","picture"]):
-        tag.decompose()
-
-    main = (soup.find("main") or soup.find("article") or
-            soup.find(id=re.compile(r"content|main|body|terms|privacy", re.I)) or
-            soup.find(class_=re.compile(r"content|main|body|terms|privacy", re.I)) or
-            soup.body or soup)
-
-    raw   = main.get_text(separator="\n")
-    lines = [l.strip() for l in raw.splitlines() if l.strip() and len(l.strip()) > 15]
-    clean = preprocess_text("\n".join(lines))
-
-    if len(clean) < 100:
-        return jsonify({"error": "Could not extract meaningful text. Try pasting directly."}), 422
-
-    if len(_url_log) < _URL_LOG_MAX:
-        _url_log.append(url)
-    logger.info(f"Fetched {url} -> {len(clean)} chars")
-    return jsonify({"text": clean, "char_count": len(clean), "url": url})
-
-
-# ── 413 handler — file too large ───────────────────────────────────────────────
-@app.errorhandler(413)
-def too_large(e):
-    return jsonify({"error": "File or request too large (maximum 10 MB)."}), 413
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+function toggleRaw(top){
+  const raw=top.closest('.clause-card').querySelector('.cc-raw');
+  const btn=top.querySelector('.cc-toggle');
+  btn.textContent=raw.classList.toggle('open')?'Hide':'View';
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function trunc(s,n){return s.length>n?s.slice(0,n)+'…':s}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')analyze()});
+</script>
+</body>
+</html>
