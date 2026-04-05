@@ -25,7 +25,7 @@ flagging the risks ordinary users never see before clicking "I Agree."*
 [![F1](https://img.shields.io/badge/CV%20F1%20Macro-0.7646-f59e0b?style=flat-square)](backend/ml/results.json)
 [![API](https://img.shields.io/badge/API-Live-22c55e?style=flat-square)](https://clauseguard-production-183f.up.railway.app/health)
 [![Demo](https://img.shields.io/badge/Demo-Live-22c55e?style=flat-square)](https://clauseguard-chi.vercel.app)
-[![SFU](https://img.shields.io/badge/Simon%20Fraser%20University-Capstone-dc2626?style=flat-square)](https://www.sfu.ca/)
+[![SFU](https://img.shields.io/badge/Simon%20Fraser%20University-Cybersecurity%20Lab%20II-dc2626?style=flat-square)](https://www.sfu.ca/)
 
 </div>
 
@@ -404,7 +404,7 @@ The training dataset contains **754 labeled clauses** from two sources:
 
 ## 🎓 Background
 
-Built as a **capstone security research project** at **Simon Fraser University**.
+Built as a **Cybersecurity Lab II final project** at **Simon Fraser University**.
 
 ClauseGuard sits at the intersection of NLP, cybersecurity risk modeling, and privacy rights — treating legal document analysis as a **defensive security problem** rather than a legal one. The goal is to surface the risks that ordinary users agree to every day without realising it.
 

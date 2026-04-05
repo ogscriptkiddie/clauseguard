@@ -37,7 +37,10 @@
   ],
 
   "host_permissions": [
-    "http://localhost:5000/*",
     "https://clauseguard-production-183f.up.railway.app/*"
-  ]
+  ],
+
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src https://clauseguard-production-183f.up.railway.app; img-src 'self' data:; object-src 'none'"
+  }
 }

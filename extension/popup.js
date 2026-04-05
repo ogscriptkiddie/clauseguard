@@ -177,12 +177,13 @@ function render(data, extractionMethod = "server") {
   const { risk_score, risk_level, category_scores, clauses,
           total_clauses_analyzed, total_risk_clauses_detected, processing_time_ms } = data;
 
-  // Score card
+  // Score card — use textContent (not innerHTML) for API data
   const scoreCard = document.getElementById("score-card");
-  scoreCard.className = `score-card ${risk_level}`;
-  document.getElementById("score-number").textContent  = risk_score;
-  document.getElementById("score-verdict").textContent = `${risk_level} RISK`;
-  document.getElementById("score-tagline").textContent = SCORE_TAGLINES[risk_level];
+  const safeLevel = ["HIGH", "MEDIUM", "LOW"].includes(risk_level) ? risk_level : "LOW";
+  scoreCard.className = `score-card ${safeLevel}`;
+  document.getElementById("score-number").textContent  = Math.min(100, Math.max(0, Number(risk_score) || 0));
+  document.getElementById("score-verdict").textContent = `${safeLevel} RISK`;
+  document.getElementById("score-tagline").textContent = SCORE_TAGLINES[safeLevel] ?? "";
 
   // Pills — one per category with findings, HIGH first
   const pillsEl = document.getElementById("pills");
@@ -213,16 +214,16 @@ function render(data, extractionMethod = "server") {
         : null;
 
       const pill = document.createElement("div");
-      pill.className = `pill ${lvl}`;
+      pill.className = `pill ${esc(lvl)}`;
       pill.innerHTML = `
-        <div class="pill-icon">${trans.icon}</div>
+        <div class="pill-icon">${esc(trans.icon)}</div>
         <div style="flex:1">
-          <div class="pill-title">${trans.title}</div>
-          <div class="pill-detail">${trans.detail}</div>
+          <div class="pill-title">${esc(trans.title)}</div>
+          <div class="pill-detail">${esc(trans.detail)}</div>
           ${snippetText ? `
-            <div class="pill-expand" data-open="false">▸ See clause${clauseRef ? " (" + clauseRef + ")" : ""}</div>
+            <div class="pill-expand" data-open="false">▸ See clause${clauseRef ? " (" + esc(clauseRef) + ")" : ""}</div>
             <div class="pill-clause hidden">
-              ${clauseRef ? '<span class="pill-clause-ref">' + clauseRef + ' — use Ctrl+F on the page to find it</span>' : ""}
+              ${clauseRef ? '<span class="pill-clause-ref">' + esc(clauseRef) + ' — use Ctrl+F on the page to find it</span>' : ""}
               ${esc(snippetText)}
             </div>
           ` : ""}
@@ -249,12 +250,15 @@ function render(data, extractionMethod = "server") {
     const cat = category_scores[catId];
     if (!cat) return;
     const rc = cat.max_risk_level === "NONE" ? "NONE" : cat.max_risk_level;
+    const safeRc = esc(rc);
     const row = document.createElement("div");
     row.className = "cat-row";
+    // cat.score is a number from the backend — clamp it so it can't break the style attribute
+    const safeScore = Math.min(100, Math.max(0, Number(cat.score) || 0));
     row.innerHTML = `
-      <div class="cat-name">${cat.label}</div>
-      <div class="cat-bar-bg"><div class="cat-bar-fill ${rc}" style="width:${cat.score}%"></div></div>
-      <div class="cat-badge ${rc}">${rc === "NONE" ? "Clean" : rc}</div>`;
+      <div class="cat-name">${esc(cat.label)}</div>
+      <div class="cat-bar-bg"><div class="cat-bar-fill ${safeRc}" style="width:${safeScore}%"></div></div>
+      <div class="cat-badge ${safeRc}">${safeRc === "NONE" ? "Clean" : safeRc}</div>`;
     catGrid.appendChild(row);
   });
 
@@ -266,5 +270,8 @@ function render(data, extractionMethod = "server") {
 }
 
 function esc(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
 }
