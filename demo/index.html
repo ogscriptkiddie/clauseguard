@@ -47,68 +47,8 @@ body::before{
   opacity:.028;mix-blend-mode:multiply;
 }
 
-/* ── CURSOR — Scanner Reticle ────────────────────────── */
-*{cursor:none!important}
-
-/* Center dot — sharp ink square, rotated 45° = diamond */
-#cur{
-  position:fixed;
-  width:5px;height:5px;
-  background:var(--red);
-  pointer-events:none;z-index:9999;
-  transform:translate(-50%,-50%) rotate(45deg);
-  transition:width .1s,height .1s,background .15s;
-}
-
-/* Scanning reticle — 4 corner brackets, no full border */
-#cur2{
-  position:fixed;
-  width:28px;height:28px;
-  pointer-events:none;z-index:9999;
-  transform:translate(-50%,-50%);
-}
-/* The 4 corner brackets drawn with pseudo + box-shadow trick via SVG bg */
-#cur2::before,#cur2::after{
-  content:'';position:absolute;
-  width:8px;height:8px;
-  border-color:var(--ink2);
-  border-style:solid;
-  transition:width .15s,height .15s,border-color .15s;
-}
-/* Top-left bracket */
-#cur2::before{
-  top:0;left:0;
-  border-width:1.5px 0 0 1.5px;
-}
-/* Bottom-right bracket */
-#cur2::after{
-  bottom:0;right:0;
-  border-width:0 1.5px 1.5px 0;
-}
-/* Two more corners via child spans */
-#cur2 span::before,#cur2 span::after{
-  content:'';position:absolute;
-  width:8px;height:8px;
-  border-color:var(--ink2);
-  border-style:solid;
-  transition:width .15s,height .15s,border-color .15s;
-}
-#cur2 span::before{top:0;right:0;border-width:1.5px 1.5px 0 0}
-#cur2 span::after{bottom:0;left:0;border-width:0 0 1.5px 1.5px}
-
-/* Hover state — reticle expands and goes red on interactive elements */
-a:hover ~ #cur2,
-button:hover ~ #cur2,
-.ql:hover ~ #cur2,
-.hero-cta:hover ~ #cur2 { width:36px;height:36px; }
-
-body.cursor-hover #cur2::before,
-body.cursor-hover #cur2::after,
-body.cursor-hover #cur2 span::before,
-body.cursor-hover #cur2 span::after{
-  border-color:var(--red);
-}
-body.cursor-hover #cur{ background:var(--ink); transform:translate(-50%,-50%) rotate(45deg) scale(0.6); }
+/* ── CURSOR — Custom Anathema ────────────────────────── */
+*{cursor:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACc0lEQVR4nO3VPWgUQRQH8P/Mfl6CosZGhEjInYVgFcEmwUIIJBbaCCckVQoNmMIidqYJghBSeNZHsDtQEK7QqNiYFDYpbfyCC/GDhEP3bu9uj9l5z2IuJ4gYNfcBcg8eC8vMvt/OzpsFuh2FdPpwN+tLAJcL6fT1bgIEM98tpNPT3QJACCEBZAtTUxe7AmBmAHBAlNucmTnfWYCUAADWGgB8ED3ams521GAEOLHHaIDIHr8aX7+dEcAwnEA2wZgVoGZAaIjAJ5+WVwcbj/AsgApISwLIDIQZjDzMRA9315ePt5egOdBui5g22YfxLGBmBxirZ/tZDJH2wdIJCA8D8JxIIQAK9WEsFJAHJ9irZ/sZDIH2wKQrmuKN5Lr9SaCmc1VqTOsVH57aSnRcoDo74fs64PwPMB1ASkNYjeVAtdqoGr1HEXRg88LC05rAY03l74P6fsQjgOqVkFRZAC1WvNKYXiBwvD+1uysbBXAFo4DeB6E1mYveB64XDYFPQ8ATIeg0R212hWKohKAa60AmDa0bQjLaq6C9H3oIACVSqAwhK5UTAYBKAxBYXj1w8TEnVYAbBCZ3W/b5jwwn4Mpim7pcvkFa50UjpMCUZKVSrFSSVbqENfrN9+Ojn5Lra/vC2Kz1qbtGocQpARc997w6urtxphXP096NzY2wEqlWOvkm5GRgZMbG8V/BlAUNXu+8UN6KCzrxu8mJdfWigCKv8L9NYArld1eByv1krWeHlxZof0++I8Bulw2K8D8mpW6NJjNRp0qbgBBAMTxRxBNnsjlvnayOADYFIYB4nhyKJ/f7HRxAMD78XGx96he9KIX/3F8B/1cUyF9Cq2vAAAAAElFTkSuQmCC') 1 3, auto !important}
 
 /* ── NAV ─────────────────────────────────────────────── */
 nav{
@@ -192,13 +132,6 @@ nav.scrolled{
 }
 .hero-h1 em{
   font-style:italic;color:var(--red);
-  position:relative;
-}
-/* Red underline accent on the italic word */
-.hero-h1 em::after{
-  content:'';position:absolute;
-  bottom:-4px;left:0;right:0;height:3px;
-  background:var(--red);opacity:.3;
 }
 .hero-h1 .h1-ghost{
   -webkit-text-stroke:2px var(--red);
@@ -424,6 +357,44 @@ nav.scrolled{
 }
 .paste-ta:focus{border-color:var(--ink2);box-shadow:0 0 0 3px rgba(26,23,20,.06)}
 .paste-ta::placeholder{color:var(--ink4)}
+
+/* ── PDF UPLOAD ───────────────────────────────────────── */
+.pdf-drop{
+  position:relative;
+  border:1px dashed var(--parchment4);
+  background:var(--parchment2);
+  padding:40px 24px;
+  text-align:center;
+  transition:border-color .2s,background .2s;
+  margin-bottom:4px;
+}
+.pdf-drop.drag-over{border-color:var(--red);background:rgba(196,30,30,.04)}
+.pdf-drop input[type=file]{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;cursor:pointer;
+}
+.pdf-drop-icon{
+  width:28px;height:28px;
+  margin:0 auto 14px;
+  opacity:.3;
+}
+.pdf-drop-label{
+  display:block;
+  font-family:'DM Mono',monospace;font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:6px;
+}
+.pdf-drop-sub{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:var(--ink4);
+}
+.pdf-file-chosen{
+  display:none;
+  font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--forest);letter-spacing:.3px;
+  margin-top:10px;
+}
+.pdf-file-chosen.on{display:block}
 
 .sample-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 
@@ -807,8 +778,6 @@ footer{
 </head>
 <body>
 
-<div id="cur"></div>
-<div id="cur2"><span></span></div>
 
 <!-- NAV -->
 <nav id="nav">
@@ -839,7 +808,7 @@ footer{
     <div>
       <div class="hero-eyebrow reveal">
         <span class="hero-eyebrow-line"></span>
-        SFU Capstone &nbsp;·&nbsp; 2026
+        SFU Cybersecurity Lab II &nbsp;·&nbsp; 2026
       </div>
       <h1 class="hero-h1 reveal reveal-delay-1">
         The terms<br/>
@@ -908,7 +877,7 @@ footer{
 
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('url',this)">URL</button>
-        <button class="tab-btn" onclick="switchTab('paste',this)">Paste Text</button>
+        <button class="tab-btn" onclick="switchTab('pdf',this)">Upload PDF</button>
       </div>
 
       <div id="panel-url">
@@ -928,16 +897,19 @@ footer{
         <div class="fetch-msg" id="fetch-msg"></div>
       </div>
 
-      <div id="panel-paste" style="display:none">
-        <textarea class="paste-ta" id="paste-ta" placeholder="Paste the full Terms of Service or Privacy Policy text here…"></textarea>
-        <div class="sample-row">
-          <span class="ql-sep">Samples →</span>
-          <button class="ql" onclick="loadSample('arb')">Arbitration</button>
-          <button class="ql" onclick="loadSample('data')">Data Selling</button>
-          <button class="ql" onclick="loadSample('ip')">IP License</button>
-          <button class="ql" onclick="loadSample('liab')">Liability Cap</button>
-          <button class="ql" onclick="loadSample('full')">Full Sample</button>
+      <!-- PDF Upload panel -->
+      <div id="panel-pdf" style="display:none">
+        <div class="pdf-drop" id="pdf-drop">
+          <input type="file" id="pdf-file" accept="application/pdf" onchange="pdfFileChosen(this)"/>
+          <svg class="pdf-drop-icon" viewBox="0 0 28 28" fill="none">
+            <rect x="3" y="1" width="16" height="22" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M15 1v7h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M7 15h10M7 19h6M7 11h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span class="pdf-drop-label">Drop PDF here or click to browse</span>
+          <span class="pdf-drop-sub">Terms of Service or Privacy Policy · PDF only</span>
         </div>
+        <div class="pdf-file-chosen" id="pdf-file-chosen"></div>
       </div>
 
       <div class="input-bottom">
@@ -1035,7 +1007,7 @@ footer{
         to understand.
       </h2>
       <p class="about-body reveal reveal-delay-2">
-        Built as a capstone security research project at Simon Fraser University. ClauseGuard treats legal document analysis as a defensive security problem — surfacing the risk language that platforms count on users never reading.
+        Built as a security research project for SFU Cybersecurity Lab II. ClauseGuard treats legal document analysis as a defensive security problem — surfacing the risk language that platforms count on users never reading.
       </p>
       <p class="about-body reveal reveal-delay-2" style="font-size:13.5px">
         Trained on 312 hand-annotated clauses augmented with 446 from the CLAUDETTE corpus (Drawzeski et al., 2021, University of Bologna). Privacy-specific categories are novel contributions not present in prior academic work.
@@ -1079,35 +1051,6 @@ footer{
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* ═══════════════════════════════════════════════════════
-   CURSOR — Scanner Reticle
-   Primary dot: snaps to mouse instantly (no lag)
-   Reticle: follows with slight lag for a scanning feel
-   On hover over interactive elements: expands + turns red
-═══════════════════════════════════════════════════════ */
-const cur=document.getElementById('cur'),cur2=document.getElementById('cur2');
-let cx=0,cy=0,rx=0,ry=0;
-
-document.addEventListener('mousemove',e=>{cx=e.clientX;cy=e.clientY});
-
-// Hover detection — add/remove class on body
-document.addEventListener('mouseover',e=>{
-  const t=e.target.closest('a,button,.ql,.hero-cta,.run-btn,.url-go,.tab-btn,.cc-toggle,.show-more-btn,.about-link,.footer-links a');
-  document.body.classList.toggle('cursor-hover',!!t);
-});
-
-(function loop(){
-  requestAnimationFrame(loop);
-  // Dot: instant snap
-  cur.style.left=cx+'px';
-  cur.style.top=cy+'px';
-  // Reticle: fast but smooth (0.22 = snappy, not sluggish)
-  rx+=(cx-rx)*.22;
-  ry+=(cy-ry)*.22;
-  cur2.style.left=rx+'px';
-  cur2.style.top=ry+'px';
-})();
-
 /* ═══════════════════════════════════════════════════════
    NAV SCROLL STATE
 ═══════════════════════════════════════════════════════ */
@@ -1431,20 +1374,41 @@ function switchTab(name,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('panel-url').style.display=name==='url'?'block':'none';
-  document.getElementById('panel-paste').style.display=name==='paste'?'block':'none';
+  document.getElementById('panel-pdf').style.display=name==='pdf'?'block':'none';
   upd();
 }
 function setUrl(u){document.getElementById('url-in').value=u;setFetchMsg('','');fetchedText='';upd()}
 function setFetchMsg(t,c){const e=document.getElementById('fetch-msg');e.textContent=t;e.className='fetch-msg'+(c?' '+c:'')}
 function upd(){
   const e=document.getElementById('char-ct');
-  if(activeTab==='paste'){const n=document.getElementById('paste-ta').value.length;e.textContent=n?n.toLocaleString()+' chars':'—';}
-  else if(fetchedText)e.textContent=fetchedText.length.toLocaleString()+' chars fetched';
+  if(activeTab==='pdf'){
+    const f=document.getElementById('pdf-file').files[0];
+    e.textContent=f?f.name+' · '+Math.round(f.size/1024)+' KB':'—';
+  } else if(fetchedText)e.textContent=fetchedText.length.toLocaleString()+' chars fetched';
   else e.textContent='—';
 }
-document.getElementById('paste-ta').addEventListener('input',upd);
 document.getElementById('url-in').addEventListener('input',()=>{fetchedText='';setFetchMsg('','');upd()});
-function loadSample(k){document.getElementById('paste-ta').value=SAMPLES[k];upd()}
+
+// PDF drag-and-drop
+const pdfDrop=document.getElementById('pdf-drop');
+pdfDrop.addEventListener('dragover',e=>{e.preventDefault();pdfDrop.classList.add('drag-over')});
+pdfDrop.addEventListener('dragleave',()=>pdfDrop.classList.remove('drag-over'));
+pdfDrop.addEventListener('drop',e=>{
+  e.preventDefault();pdfDrop.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type==='application/pdf'){
+    const dt=new DataTransfer();dt.items.add(f);
+    document.getElementById('pdf-file').files=dt.files;
+    pdfFileChosen(document.getElementById('pdf-file'));
+  }
+});
+function pdfFileChosen(input){
+  const f=input.files[0];
+  const lbl=document.getElementById('pdf-file-chosen');
+  if(f){lbl.textContent='✓  '+f.name;lbl.classList.add('on');}
+  else{lbl.textContent='';lbl.classList.remove('on');}
+  upd();
+}
 
 async function fetchGo(){
   const url=document.getElementById('url-in').value.trim();
@@ -1464,9 +1428,29 @@ async function fetchGo(){
 }
 
 function analyze(){
-  const text=activeTab==='url'?fetchedText:document.getElementById('paste-ta').value.trim();
-  if(!text||text.length<50){showErr(activeTab==='url'?'Fetch a URL first, or switch to Paste Text.':'Paste at least 50 characters or load a sample.');return}
+  if(activeTab==='pdf'){
+    const f=document.getElementById('pdf-file').files[0];
+    if(!f){showErr('Select a PDF file first.');return}
+    uploadPdf(f);return;
+  }
+  const text=fetchedText;
+  if(!text||text.length<50){showErr('Fetch a URL first, or switch to Upload PDF.');return}
   runAnalysis(text);
+}
+
+async function uploadPdf(file){
+  soff('results');soff('err-block');son('scan-wrap');
+  document.getElementById('run-btn').disabled=true;
+  let i=0;const sub=document.getElementById('scan-sub');
+  const t=setInterval(()=>{sub.textContent=LOGS[i++%LOGS.length]},700);
+  try{
+    const fd=new FormData();fd.append('file',file);
+    const res=await fetch(`${API}/upload-pdf`,{method:'POST',body:fd});
+    clearInterval(t);
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`HTTP ${res.status}`)}
+    render(await res.json());
+  }catch(e){clearInterval(t);showErr('PDF analysis error: '+e.message)}
+  finally{soff('scan-wrap');document.getElementById('run-btn').disabled=false}
 }
 
 const LOGS=['Segmenting legal clauses…','Running rule classifier…','Detecting negation patterns…','Computing category weights…','Building risk profile…','Finalizing…'];
