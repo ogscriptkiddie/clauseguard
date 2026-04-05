@@ -830,7 +830,7 @@ footer{
         <div class="hc-l">Labeled Training<br/>Clauses</div>
       </div>
       <div class="hc-stat">
-        <div class="hc-n">0.76</div>
+        <div class="hc-n">0.7558</div>
         <div class="hc-l">Group CV F1<br/>Score</div>
       </div>
       <div class="hc-stat">
@@ -890,9 +890,6 @@ footer{
           <button class="ql" onclick="setUrl('https://www.spotify.com/us/legal/end-user-agreement/')">Spotify</button>
           <button class="ql" onclick="setUrl('https://discord.com/privacy')">Discord</button>
           <button class="ql" onclick="setUrl('https://www.airbnb.ca/terms')">Airbnb</button>
-          <button class="ql" onclick="setUrl('https://www.linkedin.com/legal/user-agreement')">LinkedIn</button>
-          <button class="ql" onclick="setUrl('https://www.doordash.com/terms/')">DoorDash</button>
-          <button class="ql" onclick="setUrl('https://www.amazon.com/gp/help/customer/display.html?nodeId=508088')">Amazon</button>
         </div>
         <div class="fetch-msg" id="fetch-msg"></div>
       </div>
@@ -978,7 +975,7 @@ footer{
       <div class="sidebar-card">
         <div class="sidebar-title">How It Works</div>
         <div style="font-size:12.5px;font-weight:300;color:var(--ink3);line-height:1.8;">
-          spaCy segments the document into legal clauses. A hybrid TF-IDF + Logistic Regression model classifies each one — falling back to 757 keyword rules when confidence is below 0.60. Weighted score returned in milliseconds.
+          spaCy segments the document into legal clauses. A hybrid TF-IDF + Logistic Regression model classifies each one — falling back to 757 keyword rules when confidence is below 0.60. Hybrid classification with evidence-based scoring returned in milliseconds.
         </div>
         <div id="model-scene"><canvas id="model-canvas"></canvas></div>
       </div>
@@ -1453,7 +1450,7 @@ async function uploadPdf(file){
   finally{soff('scan-wrap');document.getElementById('run-btn').disabled=false}
 }
 
-const LOGS=['Segmenting legal clauses…','Running rule classifier…','Detecting negation patterns…','Computing category weights…','Building risk profile…','Finalizing…'];
+const LOGS=['Segmenting legal clauses…','Detecting clause-level risk signals…','Running hybrid classifier…','Scoring evidence across clauses…','Building final risk profile…','Finalizing…'];
 
 function son(id){document.getElementById(id).classList.add('on')}
 function soff(id){document.getElementById(id).classList.remove('on')}
@@ -1602,7 +1599,7 @@ function render(data){
   const LOW_CLAUSES  = allClauses.filter(c=>c.risk_level==='LOW');
 
   const total = allClauses.length;
-  document.getElementById('clauses-lbl').textContent = total ? `Flagged Clauses — ${total}` : 'Flagged Clauses';
+  document.getElementById('clauses-lbl').textContent = total ? `Flagged Clauses by Risk Level — ${total}` : 'Flagged Clauses by Risk Level';
 
   // Summary bar
   const bar = document.getElementById('risk-summary-bar');
@@ -1616,7 +1613,7 @@ function render(data){
   }
 
   if(!total){
-    stack.innerHTML='<div style="padding:32px 0;font-family:DM Mono,monospace;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:1px;">✓  No risk clauses detected.</div>';
+    stack.innerHTML='<div style="padding:28px 24px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);font-family:DM Mono,monospace;"><div style="font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.55);margin-bottom:6px;">✓  No major risk clauses detected.</div><div style="font-size:10px;color:rgba(255,255,255,.25);line-height:1.7;">No strong risky language patterns were found — this does not mean the agreement is harmless.</div></div>';
     return;
   }
 
