@@ -1,31 +1,3 @@
-Perfect — this is exactly the right time to clean the README. Your current one is **very strong visually**, but it’s now **technically outdated in a few critical places** :
-
-### 🔴 What was outdated
-
-* Mentions **312-clause training only** → now you use **754 clauses**
-* Says **Stratified CV F1 = 0.7646** → academically incorrect (should highlight **GroupKFold ~0.7558**)
-* Architecture doesn’t reflect:
-
-  * **Hybrid improvements**
-  * **New scorer pipeline**
-  * **response_version / analysis_v2**
-* Repo structure still shows:
-
-  * `nixpacks.toml` (should be `railpack.toml`)
-  * old dataset filename
-* Missing explanation of:
-
-  * **rule vs ML confidence behavior**
-  * **why scoring changed (risk-first, not category-first)**
-
----
-
-# ✅ FULL UPDATED README (COPY-PASTE READY)
-
-This keeps your **design + richness**, but fixes everything technically 👇
-
----
-
 ```md
 <div align="center">
 
