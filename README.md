@@ -298,7 +298,7 @@ ClauseGuard is a **Simon Fraser University cybersecurity capstone project** (202
 **Tanish Rathore** — Cybersecurity · Simon Fraser University
 
 [![GitHub](https://img.shields.io/badge/GitHub-ogscriptkiddie-181717?style=flat-square&logo=github)](https://github.com/ogscriptkiddie)
-[![Portfolio](https://img.shields.io/badge/Portfolio-ogscriptkiddie.github.io-0ea5e9?style=flat-square)](https://tanishr.dev/)
+[![Portfolio](https://img.shields.io/badge/Portfolio-0ea5e9?style=flat-square)](https://tanishr.dev/)
 
 ---
 
