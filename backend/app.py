@@ -4,7 +4,7 @@ ClauseGuard Flask API
 Routes:
   GET  /health           — liveness check
   POST /analyze          — full ToS analysis (text -> risk JSON)
-  POST /fetch-url        — server-side URL fetch + clean text extraction
+  POST /fetch-url        — server-side URL fetch + clean text extraction.
   POST /upload-pdf       — PDF upload -> text extraction -> risk JSON
 """
 import os
