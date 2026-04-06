@@ -511,11 +511,11 @@ def upload_pdf():
             return jsonify({"error": "PDF too large (maximum 10 MB)."}), 413
 
         reader = PdfReader(io.BytesIO(raw_bytes))
-
         if reader.is_encrypted:
-            return jsonify({
-                "error": "PDF is password-protected. Please remove the password and try again."
-            }), 422
+            result = reader.decrypt('')   # try empty string (owner-password-only PDFs always pass this)
+            if result == 0:               # 0 = decryption failed = real user password required
+            return jsonify({"error": "PDF is password protected"}), 400
+            #result 1 or 2 = accessible, continue normally
 
         text_parts = []
         for page in reader.pages:
