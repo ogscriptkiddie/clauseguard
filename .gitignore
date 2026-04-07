@@ -33,7 +33,7 @@ backend/ml/claudette_extracted.csv
 .DS_Store
 Thumbs.db
 
-# ─── Environment variables (NEVER commit secrets) ─────────────────────────────
+# ─── Environment variables ─────────────────────────────
 .env
 .env.local
 *.env
